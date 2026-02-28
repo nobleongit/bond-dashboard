@@ -49,6 +49,15 @@ const COUPON_TYPE_COLORS = {
   "Zero Coupon":"#9ca3af","Step Up":"#f97316","Inflazione":"#8b5cf6",
 };
 
+// Ordine standard rating investment grade → speculative → ND (per grafici)
+const RATING_ORDER = [
+  "AAA","AA+","AA","AA-","A+","A","A-",
+  "BBB+","BBB","BBB-","Baa1","Baa2","Baa3",
+  "BB+","BB","BB-","B+","B","B-",
+  "CCC+","CCC","CCC-","CC","C","D","ND",
+];
+const ratingRank = (r) => { const i = RATING_ORDER.indexOf(r); return i === -1 ? 999 : i; };
+
 // ─── DATI INIZIALI (aggiornati dal file Excel reale) ──────────────────────────
 const INITIAL_BONDS = [
   { valuta:"EUR", issuer:"ROMANIA (GOVERNMENT)",                        isin:"XS2109812508", name:"ROGV 2.000 01/28/32 MTN",     scadenza:"2032-01-28", callDate:"",           cedola:2.0,   ask:88.668,  yldYtm:4.323556, yldToCall:null,     duration:5.3701, taglioMin:1000, rating:"BBB-", peso:10,   tipo:"Governativo",    seniority:"Senior Unsecured", tipoCedola:"Fixed",    couponFreq:1, sector:"Government Activity",  ammEmesso:1400000000  },
@@ -119,9 +128,13 @@ function normalizeCouponType(raw="") {
 
 // ─── CSV PARSER ───────────────────────────────────────────────────────────────
 function parseCSV(text) {
-  const lines = text.trim().split(/\r?\n/);
-  if (lines.length < 2) return { error:"CSV non valido." };
-  const sep  = lines[0].includes(";") ? ";" : ",";
+  // Strip BOM if present (UTF-8 BOM: EF BB BF → \uFEFF)
+  const clean = text.replace(/^\uFEFF/, "").trim();
+  const lines = clean.split(/\r?\n/);
+  if (lines.length < 2) return { error:"CSV non valido: meno di 2 righe." };
+  // Auto-detect separator: ; or , or \t
+  const firstLine = lines[0];
+  const sep = firstLine.includes(";") ? ";" : firstLine.includes("\t") ? "\t" : ",";
   const hdrs = lines[0].split(sep).map(h=>h.trim().toLowerCase().replace(/['"]/g,""));
   const ix   = (...al) => { for(const a of al){const i=hdrs.indexOf(a);if(i>=0)return i;} return -1; };
   const c = {
@@ -197,6 +210,30 @@ function downloadCSVTemplate() {
   if(w){w.document.write(`<pre style="font-family:monospace;padding:20px;font-size:12px">${h}\n${e}</pre><p style="padding:0 20px;font-family:sans-serif;font-size:12px;color:#666">Copia e salva come .csv (separatore punto e virgola)</p>`);w.document.title="Template CSV";}
 }
 
+// ─── HELPERS REPORT ──────────────────────────────────────────────────────────
+// Genera una sezione di composizione HTML con barre CSS colorate
+function buildCompositionSection(title, data, colorMap) {
+  const max = Math.max(...data.map(d=>d.peso), 1);
+  const rows = data.map(d=>{
+    const col = colorMap[d.name] || "#94a3b8";
+    const pct = Number(d.peso).toFixed(1);
+    const bar = Math.round((d.peso/max)*100);
+    return `<tr>
+      <td style="padding:5px 8px;font-size:10px;white-space:nowrap;width:130px;color:#374151;font-weight:600">${d.name}</td>
+      <td style="padding:5px 8px;width:100%">
+        <div style="background:#f3f4f6;border-radius:4px;overflow:hidden;height:14px">
+          <div style="background:${col};width:${bar}%;height:14px;border-radius:4px;transition:width 0.3s"></div>
+        </div>
+      </td>
+      <td style="padding:5px 8px;font-size:10px;font-weight:700;color:${col};white-space:nowrap;text-align:right">${pct}%</td>
+    </tr>`;
+  }).join("");
+  return `<div style="break-inside:avoid;margin-bottom:14px">
+    <div style="font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">${title}</div>
+    <table style="width:100%;border-collapse:collapse;margin:0"><tbody>${rows}</tbody></table>
+  </div>`;
+}
+
 // ─── REPORT ───────────────────────────────────────────────────────────────────
 function openReport(bonds,totale,stats,monthlyData) {
   const today=new Date().toLocaleDateString("it-IT");
@@ -262,6 +299,33 @@ td{padding:5px 5px;border-bottom:1px solid #f3f4f6;font-size:10px}tr:nth-child(e
 <tbody><tr><td style="font-weight:700">${new Date().getFullYear()+1}</td>${cedRow}
 <td align="right" style="font-weight:800;background:#fffbeb;color:#92400e">${fe(monthlyData.reduce((s,m)=>s+m.cedola,0))}</td>
 </tr></tbody></table>
+<div class="sec">Composizione Portafoglio</div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-bottom:20px">
+  ${(()=>{
+    const ratingMap={"AAA":"#059669","AA+":"#10b981","AA":"#34d399","AA-":"#6ee7b7","A+":"#3b82f6","A":"#60a5fa","A-":"#93c5fd","BBB+":"#8b5cf6","BBB":"#a78bfa","BBB-":"#c4b5fd","Baa2":"#ddd6fe","BB+":"#ef4444","BB":"#f87171","ND":"#9ca3af"};
+    const tipoMap={"Governativo":"#3b82f6","Corporate":"#8b5cf6","Sovranazionale":"#10b981"};
+    const seniMap={"Senior Unsecured":"#22c55e","Senior Secured":"#10b981","Tier 2":"#f59e0b","AT1":"#f97316","Junior Subordinated":"#ef4444"};
+    const sectMap={"Government Activity":"#3b82f6","Utilities":"#10b981","Healthcare":"#8b5cf6","Financials":"#f59e0b","Industrials":"#6b7280","Consumer Cyclicals":"#f97316","Basic Materials":"#a3e635","Technology":"#06b6d4","Energy":"#ef4444"};
+    const ccyMap={"EUR":"#3b82f6","USD":"#22c55e","GBP":"#8b5cf6","CHF":"#f59e0b"};
+    const cpnMap={"Fixed":"#22c55e","Variable":"#f59e0b","Zero Coupon":"#9ca3af","Step Up":"#f97316"};
+    const agg=(fn)=>{const r={};bonds.forEach(b=>{const k=fn(b)||"ND";r[k]=(r[k]||0)+b.peso;});return Object.entries(r).map(([k,v])=>({name:k,peso:v})).sort((a,b)=>b.peso-a.peso);};
+    const RATING_ORD=["AAA","AA+","AA","AA-","A+","A","A-","BBB+","BBB","BBB-","Baa1","Baa2","Baa3","BB+","BB","BB-","ND"];
+    const ratingD=agg(b=>b.rating).sort((a,b)=>RATING_ORD.indexOf(a.name)-RATING_ORD.indexOf(b.name));
+    const tipoD=agg(b=>b.tipo);
+    const seniD=agg(b=>b.seniority);
+    const sectD=agg(b=>b.sector);
+    const ccyD=agg(b=>b.valuta);
+    const cpnD=agg(b=>b.tipoCedola);
+    return [
+      buildCompositionSection("Per Rating",ratingD,ratingMap),
+      buildCompositionSection("Per Tipologia",tipoD,tipoMap),
+      buildCompositionSection("Per Seniority",seniD,seniMap),
+      buildCompositionSection("Per Settore",sectD,sectMap),
+      buildCompositionSection("Per Valuta",ccyD,ccyMap),
+      buildCompositionSection("Per Tipo Cedola",cpnD,cpnMap),
+    ].join("");
+  })()}
+</div>
 <div class="foot"><span>Report generato automaticamente · Dashboard Portafoglio Obbligazionario</span><span>Solo a fini informativi.</span></div>
 </body></html>`;
   const w=window.open("","_blank");
@@ -280,6 +344,7 @@ const EMPTY_BOND = {
 export default function App() {
   const [bonds,setBonds]               = useState(INITIAL_BONDS);
   const [totale,setTotale]             = useState(100000);
+  const [rawTotale,setRawTotale]       = useState("100000"); // stringa per input controllato
   const [activeTab,setActiveTab]       = useState("overview");
   const [showAddForm,setShowAddForm]   = useState(false);
   const [addForm,setAddForm]           = useState(EMPTY_BOND);
@@ -334,7 +399,16 @@ export default function App() {
   },[bonds]);
 
   // Dati composizione
-  const ratingData   = useMemo(()=>{const r={};bonds.forEach(b=>{r[b.rating]=(r[b.rating]||0)+b.peso;});return Object.entries(r).map(([k,v])=>({name:k,peso:v}));},[bonds]);
+  // Rating ordinati per qualità: AAA in cima, ND in fondo
+  // In recharts layout="vertical" l'array viene renderizzato dal basso verso l'alto,
+  // quindi per avere AAA in cima dobbiamo invertire l'ordine (worst first → AAA last)
+  const ratingData = useMemo(()=>{
+    const r={};
+    bonds.forEach(b=>{r[b.rating]=(r[b.rating]||0)+b.peso;});
+    return Object.entries(r)
+      .map(([k,v])=>({name:k,peso:v}))
+      .sort((a,b)=>ratingRank(b.name)-ratingRank(a.name)); // inverted: ND first → AAA last = AAA on top
+  },[bonds]);
   const tipoData     = useMemo(()=>{const r={};bonds.forEach(b=>{r[b.tipo]=(r[b.tipo]||0)+b.peso;});return Object.entries(r).map(([k,v])=>({name:k,peso:v}));},[bonds]);
   const seniData     = useMemo(()=>{const r={};bonds.forEach(b=>{const s=b.seniority||"Senior Unsecured";r[s]=(r[s]||0)+b.peso;});return Object.entries(r).map(([k,v])=>({name:k,peso:v}));},[bonds]);
   const sectorData   = useMemo(()=>{const r={};bonds.forEach(b=>{const s=b.sector||"—";r[s]=(r[s]||0)+b.peso;});return Object.entries(r).map(([k,v])=>({name:k,peso:v})).sort((a,b)=>b.peso-a.peso);},[bonds]);
@@ -402,46 +476,68 @@ export default function App() {
   );
   const SL=({children})=><div style={{fontSize:10,fontWeight:700,color:C.gray,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:14}}>{children}</div>;
 
-  // Mini donut helper
-  const MiniPie=({data,colorMap,title})=>(
-    <div style={{...card,padding:"18px 20px"}}>
-      <SL>{title}</SL>
-      <ResponsiveContainer width="100%" height={240}>
-        <PieChart>
-          <Pie data={data} dataKey="peso" nameKey="name" cx="50%" cy="50%" outerRadius={90} innerRadius={34}
-            label={({name,peso})=>`${name.length>10?name.substring(0,9)+"…":name} ${pct(peso)}`}
-            labelLine={{stroke:C.border}} fontSize={9}>
-            {data.map((e,i)=><Cell key={i} fill={colorMap[e.name]||`hsl(${i*47},65%,55%)`}/>)}
-          </Pie>
-          <Tooltip {...TTIP} formatter={v=>[`${Number(v).toFixed(2)}%`]}/>
-        </PieChart>
-      </ResponsiveContainer>
-    </div>
-  );
+  // Mini donut helper - usa legenda sotto invece di label esterne per evitare troncamenti
+  const MiniPie=({data,colorMap,title})=>{
+    // Label custom inline sul pie (breve)
+    const renderLabel=({cx,cy,midAngle,innerRadius,outerRadius,percent,name})=>{
+      if(percent<0.05) return null; // nasconde slice troppo piccole
+      const RADIAN=Math.PI/180;
+      const r=innerRadius+(outerRadius-innerRadius)*0.5;
+      const x=cx+r*Math.cos(-midAngle*RADIAN);
+      const y=cy+r*Math.sin(-midAngle*RADIAN);
+      return(<text x={x} y={y} fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={10} fontWeight={700}>
+        {`${(percent*100).toFixed(0)}%`}
+      </text>);
+    };
+    return(
+      <div style={{...card,padding:"18px 20px"}}>
+        <SL>{title}</SL>
+        <ResponsiveContainer width="100%" height={210}>
+          <PieChart>
+            <Pie data={data} dataKey="peso" nameKey="name" cx="50%" cy="50%" outerRadius={85} innerRadius={32}
+              labelLine={false} label={renderLabel}>
+              {data.map((e,i)=><Cell key={i} fill={colorMap[e.name]||`hsl(${i*47},65%,55%)`}/>)}
+            </Pie>
+            <Tooltip {...TTIP} formatter={(v,name)=>[`${Number(v).toFixed(2)}%`,name]}/>
+          </PieChart>
+        </ResponsiveContainer>
+        {/* Legenda testuale sotto - sempre visibile, nessun troncamento */}
+        <div style={{display:"flex",flexWrap:"wrap",gap:"6px 12px",marginTop:8}}>
+          {data.map((e,i)=>(
+            <div key={i} style={{display:"flex",alignItems:"center",gap:5}}>
+              <span style={{width:10,height:10,borderRadius:"50%",background:colorMap[e.name]||`hsl(${i*47},65%,55%)`,flexShrink:0,display:"inline-block"}}/>
+              <span style={{fontSize:10,color:C.gray,whiteSpace:"nowrap"}}>{e.name} <b style={{color:C.dark}}>{pct(e.peso)}</b></span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div style={{minHeight:"100vh",background:C.bg,fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif",color:C.dark}}>
 
       {/* ── NAVBAR ──────────────────────────────────────────────────────────── */}
       <nav style={{background:C.card,borderBottom:`1px solid ${C.border}`,position:"sticky",top:0,zIndex:100,boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
-        <div style={{maxWidth:1600,margin:"0 auto",padding:"0 28px",display:"flex",alignItems:"center",justifyContent:"space-between",height:62}}>
-          <div style={{display:"flex",alignItems:"center",gap:16}}>
-            <div style={{background:C.dark,borderRadius:10,padding:"6px 14px",display:"flex",alignItems:"center",gap:8}}>
-              <span style={{color:C.yellow,fontSize:15,fontWeight:900}}>⬡</span>
-              <span style={{color:"#fff",fontWeight:800,fontSize:13,letterSpacing:"-.2px"}}>BondAnalyst</span>
-            </div>
-            <div style={{width:1,height:26,background:C.border}}/>
-            <div style={{display:"flex",gap:2}}>
-              {[["overview","Panoramica"],["bonds","Titoli"],["cedole","Cedole"],["scadenze","Scadenze"],["composizione","Composizione"]].map(([id,l])=>(
-                <TabBtn key={id} id={id} label={l}/>
-              ))}
-            </div>
+        {/* Riga brand + azioni */}
+        <div style={{maxWidth:1600,margin:"0 auto",padding:"0 20px",display:"flex",alignItems:"center",justifyContent:"space-between",height:52,gap:10}}>
+          <div style={{background:C.dark,borderRadius:9,padding:"5px 12px",display:"flex",alignItems:"center",gap:7,flexShrink:0}}>
+            <span style={{color:C.yellow,fontSize:14,fontWeight:900}}>⬡</span>
+            <span style={{color:"#fff",fontWeight:800,fontSize:13,letterSpacing:"-.2px"}}>BondAnalyst</span>
           </div>
-          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <div style={{display:"flex",gap:7,alignItems:"center",flexShrink:0,flexWrap:"wrap"}}>
             <input ref={fileRef} type="file" accept=".csv" style={{display:"none"}} onChange={onCSV}/>
-            <Btn onClick={()=>fileRef.current.click()}>⬆ Carica CSV</Btn>
-            <Btn onClick={downloadCSVTemplate}>⬇ Template</Btn>
-            <Btn primary onClick={()=>openReport(bonds,totale,stats,monthlyData)}>📄 Apri Report</Btn>
+            <Btn sm onClick={()=>fileRef.current.click()}>⬆ CSV</Btn>
+            <Btn sm onClick={downloadCSVTemplate}>⬇ Template</Btn>
+            <Btn primary sm onClick={()=>openReport(bonds,totale,stats,monthlyData)}>📄 Report</Btn>
+          </div>
+        </div>
+        {/* Tabs — scrollabili su schermi stretti */}
+        <div style={{borderTop:`1px solid ${C.border}`,overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none"}}>
+          <div style={{display:"flex",gap:0,padding:"0 16px",minWidth:"max-content"}}>
+            {[["overview","Panoramica"],["bonds","Titoli"],["cedole","Cedole"],["scadenze","Scadenze"],["composizione","Composizione"]].map(([id,l])=>(
+              <TabBtn key={id} id={id} label={l}/>
+            ))}
           </div>
         </div>
       </nav>
@@ -455,7 +551,7 @@ export default function App() {
         </div>
       )}
 
-      <div style={{maxWidth:1600,margin:"0 auto",padding:"24px 28px"}}>
+      <div style={{maxWidth:1600,margin:"0 auto",padding:"20px max(12px, min(28px, 2vw))"}}>
 
         {/* ═══════════════ PANORAMICA ══════════════════════════════════════ */}
         {activeTab==="overview"&&(
@@ -471,8 +567,22 @@ export default function App() {
                   <p style={{fontSize:10,color:C.gray,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:4}}>Importo Effettivo</p>
                   <div style={{display:"flex",alignItems:"baseline",gap:4}}>
                     <span style={{color:C.gray,fontWeight:600}}>€</span>
-                    <input value={totale} onChange={e=>setTotale(parseFloat(e.target.value)||100000)}
-                      style={{background:"transparent",border:"none",borderBottom:`2px solid ${C.yellow}`,color:C.dark,fontSize:24,fontWeight:800,width:140,textAlign:"right",outline:"none"}}/>
+                    <input
+                      value={rawTotale}
+                      onChange={e=>{
+                        const raw = e.target.value.replace(/[^0-9.]/g,"");
+                        setRawTotale(raw);
+                        const n = parseFloat(raw);
+                        if(!isNaN(n) && n>0) setTotale(n);
+                      }}
+                      onBlur={()=>{
+                        // al blur: se campo vuoto o non valido ripristina
+                        const n=parseFloat(rawTotale);
+                        if(isNaN(n)||n<=0){ setRawTotale(String(totale)); }
+                        else { setRawTotale(String(n)); setTotale(n); }
+                      }}
+                      style={{background:"transparent",border:"none",borderBottom:`2px solid ${C.yellow}`,color:C.dark,fontSize:24,fontWeight:800,width:160,textAlign:"right",outline:"none"}}
+                    />
                   </div>
                 </div>
               </div>
@@ -824,13 +934,15 @@ export default function App() {
             <div style={{...card,padding:"22px 24px",marginBottom:16}}>
               <SL>Rimborso per data (% portafoglio) — barre sovrapposte</SL>
               <ResponsiveContainer width="100%" height={230}>
-                <BarChart data={scadenzeData} barCategoryGap="35%">
+                {/* barCategoryGap e barGap controllano spazio tra gruppi e tra barre nello stesso gruppo */}
+                <BarChart data={scadenzeData} barCategoryGap="30%" barGap={3}>
                   <CartesianGrid strokeDasharray="3 3" stroke={C.lgray} vertical={false}/>
                   <XAxis dataKey="label" tick={{fill:C.gray,fontSize:10}} axisLine={false} tickLine={false}/>
                   <YAxis tick={{fill:C.gray,fontSize:11}} axisLine={false} tickLine={false} tickFormatter={v=>`${v.toFixed(1)}%`}/>
                   <Tooltip {...TTIP} formatter={(v,n)=>[v>0?`${Number(v).toFixed(4)}%`:"—",n==="pM"?"A Scadenza":"A Call"]}/>
-                  {showMaturity&&<Bar dataKey="pM" name="pM" stackId="s" fill={C.blue} radius={[0,0,0,0]} maxBarSize={52}/>}
-                  {showCall    &&<Bar dataKey="pC" name="pC" stackId="s" fill={C.yellow} radius={[6,6,0,0]} maxBarSize={52}/>}
+                  {/* NESSUN stackId: barre affiancate. Quando una è nascosta l'altra occupa tutto lo spazio senza sovrapposizioni */}
+                  {showMaturity&&<Bar dataKey="pM" name="pM" fill={C.blue} radius={[4,4,0,0]} maxBarSize={40}/>}
+                  {showCall    &&<Bar dataKey="pC" name="pC" fill={C.yellow} radius={[4,4,0,0]} maxBarSize={40}/>}
                 </BarChart>
               </ResponsiveContainer>
             </div>
