@@ -1,5 +1,82 @@
-import { useState, useMemo, useRef, useCallback } from "react";
+import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from "recharts";
+
+// ─── GLOBAL RESPONSIVE CSS ────────────────────────────────────────────────────
+const GLOBAL_CSS = `
+  *, *::before, *::after { box-sizing: border-box; }
+  body, #root { margin: 0; padding: 0; width: 100%; overflow-x: hidden; }
+
+  /* Contenitore principale */
+  .ba-page  { min-height: 100vh; }
+  .ba-inner { max-width: 1600px; margin: 0 auto; padding: 20px 20px; }
+
+  /* Griglie KPI adattive */
+  .ba-grid-3  { display: grid; gap: 14px; grid-template-columns: repeat(3, 1fr); }
+  .ba-grid-4  { display: grid; gap: 14px; grid-template-columns: repeat(4, 1fr); }
+  .ba-grid-12 { display: grid; gap: 8px;  grid-template-columns: repeat(12, 1fr); }
+
+  /* Layout 2 colonne 3fr/2fr panoramica */
+  .ba-chart-row { display: grid; gap: 16px; grid-template-columns: 3fr 2fr; }
+
+  /* Composizione righe */
+  .ba-comp-row1 { display: grid; gap: 16px; grid-template-columns: 1fr 1fr 1fr; margin-bottom: 16px; }
+  .ba-comp-row2 { display: grid; gap: 16px; grid-template-columns: 2fr 1fr 1fr; margin-bottom: 16px; }
+  .ba-metrics   { display: grid; gap: 12px; grid-template-columns: repeat(6, 1fr); }
+
+  /* Header panoramica */
+  .ba-overview-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; gap: 16px; flex-wrap: wrap; }
+  .ba-totale-card     { min-width: 240px; }
+
+  /* Scadenze header */
+  .ba-scad-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; gap: 12px; flex-wrap: wrap; }
+
+  /* Titoli header */
+  .ba-bonds-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; flex-wrap: wrap; gap: 12px; }
+  .ba-bonds-filters{ display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+  /* Tabella — sempre scrollabile orizzontalmente */
+  .ba-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; width: 100%; }
+  .ba-table-wrap table { min-width: 900px; width: 100%; }
+  .ba-table-bonds { min-width: 1400px !important; }
+  .ba-table-cedole{ min-width: 1100px !important; }
+
+  /* ── TABLET (≤ 1100px) ─────────────────────────────────────────────── */
+  @media (max-width: 1100px) {
+    .ba-grid-3   { grid-template-columns: 1fr 1fr; }
+    .ba-grid-4   { grid-template-columns: 1fr 1fr; }
+    .ba-chart-row{ grid-template-columns: 1fr; }
+    .ba-comp-row1{ grid-template-columns: 1fr 1fr; }
+    .ba-comp-row2{ grid-template-columns: 1fr 1fr; }
+    .ba-metrics  { grid-template-columns: repeat(4, 1fr); }
+    .ba-grid-12  { grid-template-columns: repeat(6, 1fr); }
+  }
+
+  /* ── MOBILE (≤ 720px) ──────────────────────────────────────────────── */
+  @media (max-width: 720px) {
+    .ba-inner    { padding: 12px 10px; }
+    .ba-grid-3   { grid-template-columns: 1fr; }
+    .ba-grid-4   { grid-template-columns: 1fr 1fr; }
+    .ba-chart-row{ grid-template-columns: 1fr; }
+    .ba-comp-row1{ grid-template-columns: 1fr; }
+    .ba-comp-row2{ grid-template-columns: 1fr; }
+    .ba-metrics  { grid-template-columns: repeat(2, 1fr); }
+    .ba-grid-12  { grid-template-columns: repeat(4, 1fr); }
+    .ba-totale-card { min-width: 100%; }
+  }
+`;
+
+// Inietta CSS globale una volta sola nel <head>
+function useGlobalCSS() {
+  useEffect(() => {
+    const id = "ba-global-css";
+    if (document.getElementById(id)) return;
+    const style = document.createElement("style");
+    style.id = id;
+    style.textContent = GLOBAL_CSS;
+    document.head.appendChild(style);
+    return () => { const el = document.getElementById(id); if(el) el.remove(); };
+  }, []);
+}
 
 // ─── PALETTE ──────────────────────────────────────────────────────────────────
 const C = {
@@ -126,88 +203,230 @@ function normalizeCouponType(raw="") {
   return "Fixed";
 }
 
-// ─── CSV PARSER ───────────────────────────────────────────────────────────────
+// ─── CSV PARSER — robusto per il formato reale ───────────────────────────────
+//
+// Gestisce tutte le quirks del CSV reale:
+//  • Encoding latin-1 / UTF-8 / UTF-8-BOM
+//  • Riga 0 di metadati opzionale (es. ";;27/02/2026;Dati indicativi...")
+//  • Header alla riga 0 o 1 (auto-detect dalla presenza di "ISIN")
+//  • Separatore ; o , o \t (auto-detect)
+//  • Date formato DD/MM/YYYY  oppure  YYYY-MM-DD  oppure  MM/DD/YYYY
+//  • Numeri con virgola decimale: "2,00" "88,67"
+//  • Peso con simbolo %: "25,0%" o decimale 0.25
+//  • NULL come stringa per valori assenti
+//  • Ammontare emesso con $, punti migliaia, virgola decimale: " $1.400.000.000,00 "
+//  • Righe finali spurie (totali, righe vuote) — ignorate automaticamente
+//
 function parseCSV(text) {
-  // Strip BOM if present (UTF-8 BOM: EF BB BF → \uFEFF)
-  const clean = text.replace(/^\uFEFF/, "").trim();
-  const lines = clean.split(/\r?\n/);
-  if (lines.length < 2) return { error:"CSV non valido: meno di 2 righe." };
-  // Auto-detect separator: ; or , or \t
-  const firstLine = lines[0];
-  const sep = firstLine.includes(";") ? ";" : firstLine.includes("\t") ? "\t" : ",";
-  const hdrs = lines[0].split(sep).map(h=>h.trim().toLowerCase().replace(/['"]/g,""));
-  const ix   = (...al) => { for(const a of al){const i=hdrs.indexOf(a);if(i>=0)return i;} return -1; };
-  const c = {
-    valuta:   ix("valuta","currency","ccy"),
-    issuer:   ix("issuer","issuer name","emittente","issuer_name"),
-    isin:     ix("isin"),
-    name:     ix("name","nome","security name","security_name"),
-    scadenza: ix("scadenza","maturity","scad"),
-    callDate: ix("calldate","call_date","call date"),
-    cedola:   ix("cedola","coupon","cedola%","coupon%"),
-    ask:      ix("ask","ask price","prezzo"),
-    yldYtm:   ix("yldytm","ytm","yield","rendimento","yld ytm ask","yld_ytm_ask"),
-    yldToCall:ix("yldtocall","yld to call","ytc","yld_to_call"),
-    duration: ix("duration","dur","durata","modified duration"),
-    taglioMin:ix("tagliomin","taglio_min","taglio minimo","taglio","min denomination"),
-    rating:   ix("rating"),
-    peso:     ix("peso","peso%","weight","controvalore"),
-    tipo:     ix("tipo","type","categoria"),
-    seniority:ix("seniority","subordinazione","seniorita"),
-    tipoCedola:ix("tipocedola","tipo cedola","coupon type","tipo_cedola"),
-    couponFreq:ix("couponfreq","coupon freq","coupon fred","frequenza","freq"),
-    sector:   ix("sector","settore","economic sector","economic_sector"),
-    ammEmesso:ix("ammemesso","amm emesso","ammontare emesso","issued amount","ammontare_emesso"),
+  // 1. Strip BOM (UTF-8: \uFEFF, Latin-1 può avere altri artefatti)
+  let raw = text.replace(/^\uFEFF/, "").replace(/^\xFF\xFE/, "").trim();
+
+  // 2. Split righe (CRLF o LF)
+  const lines = raw.split(/\r?\n/);
+  if (lines.length < 2) return { error: "CSV non valido: meno di 2 righe." };
+
+  // 3. Auto-detect separatore
+  const firstFull = lines[0] + (lines[1] || "");
+  const sep = firstFull.includes(";") ? ";" : firstFull.includes("\t") ? "\t" : ",";
+
+  // 4. Auto-detect riga header: cerca la riga che contiene "isin" (case-insensitive)
+  //    Salta righe di metadati iniziali (es. la riga con la data del file)
+  let headerIdx = -1;
+  for (let i = 0; i < Math.min(5, lines.length); i++) {
+    if (lines[i].toLowerCase().includes("isin")) { headerIdx = i; break; }
+  }
+  if (headerIdx < 0) return { error: "Header non trovato: nessuna colonna 'ISIN' nelle prime 5 righe." };
+
+  // 5. Parsing header — normalizza: minuscolo, trim, rimuovi quotes e spazi interni multipli
+  const hdrs = lines[headerIdx]
+    .split(sep)
+    .map(h => h.trim().toLowerCase().replace(/['"]/g, "").replace(/\s+/g, " "));
+
+  const ix = (...aliases) => {
+    for (const a of aliases) {
+      const i = hdrs.indexOf(a.toLowerCase());
+      if (i >= 0) return i;
+    }
+    return -1;
   };
-  const bonds=[],errs=[];
-  for(let i=1;i<lines.length;i++){
-    const row=lines[i].split(sep).map(x=>x.trim().replace(/^["']|["']$/g,""));
-    if(row.length<3||row.every(x=>!x)) continue;
-    const g  = (k)=>c[k]>=0?(row[c[k]]||""):"";
-    const gn = (k,d=0)=>{const v=parseFloat(g(k).replace(",","."));return isNaN(v)?d:v;};
-    if(!g("isin")){errs.push(`Riga ${i+1}: ISIN mancante`);continue;}
 
-    // Peso: se <2 è in formato decimale (0.1=10%), altrimenti già percentuale
-    let peso = gn("peso");
-    if(peso>0 && peso<2) peso=peso*100;
+  const c = {
+    valuta:    ix("valuta","currency","ccy","curr"),
+    issuer:    ix("issuer name","issuer","emittente","issuer_name"),
+    isin:      ix("isin"),
+    name:      ix("security name","security_name","name","nome","titolo"),
+    scadenza:  ix("scadenza","maturity","scad","maturity date"),
+    callDate:  ix("call date","calldate","call_date","call"),
+    cedola:    ix("cedola","coupon","cedola%","coupon%","tasso cedola"),
+    ask:       ix("ask","ask price","prezzo","price"),
+    yldYtm:    ix("yld ytm ask","yldytm","ytm","yield","rendimento","yld_ytm_ask","yld to mat"),
+    yldToCall: ix("yld to call","yldtocall","ytc","yld_to_call","yield to call"),
+    duration:  ix("duration","dur","durata","modified duration","mod duration"),
+    taglioMin: ix("taglio minimo","tagliomin","taglio_min","taglio","min denomination","min. denom"),
+    rating:    ix("rating"),
+    peso:      ix("peso","peso%","weight","controvalore","allocation","alloc%"),
+    tipo:      ix("tipo","type","categoria","asset type"),
+    seniority: ix("seniority","subordinazione","seniorita","debt type"),
+    tipoCedola:ix("tipo cedola","tipocedola","coupon type","tipo_cedola","coupon frequency type"),
+    couponFreq:ix("coupon fred","couponfreq","coupon freq","frequenza","freq","coupon frequency"),
+    sector:    ix("economic sector","economic_sector","sector","settore","industry"),
+    ammEmesso: ix("ammontare emesso","ammemesso","amm emesso","issued amount","ammontare_emesso","issue size"),
+  };
 
-    // NULL come stringa → null
-    const cleanNull=(v)=>(!v||v.toLowerCase()==="null"||v==="0")?null:v;
-    const callD = cleanNull(g("callDate"));
-    const ytc   = cleanNull(g("yldToCall"));
+  // 6. Helper: pulisce stringa raw di una cella
+  const g = (row, k) => {
+    if (c[k] < 0) return "";
+    const v = row[c[k]];
+    return v !== undefined ? v.trim().replace(/^["']|["']$/g, "") : "";
+  };
+
+  // 7. Helper: parse numero da formato IT/EN con $, %, punti migliaia, virgola decimale
+  const parseNum = (s, def = 0) => {
+    if (!s) return def;
+    let v = s.trim()
+      .replace(/\$/g, "")    // rimuovi simbolo $
+      .replace(/€/g, "")     // rimuovi simbolo €
+      .replace(/\s/g, "")    // rimuovi spazi
+      .replace(/%$/, "");    // rimuovi % finale
+    // Gestisci separatori migliaia/decimali
+    // Caso IT: "1.400.000,00" → punti=migliaia, virgola=decimale
+    // Caso EN: "1,400,000.00" → virgole=migliaia, punto=decimale
+    if (v.includes(",") && v.includes(".")) {
+      // Entrambi presenti: l'ultimo è il decimale
+      const lastComma = v.lastIndexOf(",");
+      const lastDot   = v.lastIndexOf(".");
+      if (lastComma > lastDot) {
+        // virgola è decimale → rimuovi punti, sostituisci virgola con punto
+        v = v.replace(/\./g, "").replace(",", ".");
+      } else {
+        // punto è decimale → rimuovi virgole
+        v = v.replace(/,/g, "");
+      }
+    } else if (v.includes(",")) {
+      // Solo virgola: può essere decimale (IT) o migliaia (EN con >1 virgola)
+      const commaCount = (v.match(/,/g) || []).length;
+      if (commaCount > 1) v = v.replace(/,/g, ""); // migliaia
+      else v = v.replace(",", ".");                  // decimale
+    }
+    const n = parseFloat(v);
+    return isNaN(n) ? def : n;
+  };
+
+  // 8. Helper: parse peso gestendo % e formato decimale
+  const parsePeso = (s) => {
+    if (!s) return 0;
+    const hasPct = s.includes("%");
+    const n = parseNum(s);
+    if (hasPct) return n;           // "25,0%" → 25.0
+    if (n > 0 && n <= 1) return n * 100; // 0.25 → 25.0
+    return n;                       // già percentuale intera
+  };
+
+  // 9. Helper: converte data DD/MM/YYYY o MM/DD/YYYY o YYYY-MM-DD → YYYY-MM-DD
+  const parseDate = (s) => {
+    if (!s || s.trim().toUpperCase() === "NULL" || s.trim() === "") return "";
+    s = s.trim();
+    // ISO già corretto
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10);
+    // DD/MM/YYYY  (formato europeo — il più comune nei file IT)
+    const m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+    if (m) {
+      const [, a, b, year] = m;
+      // Se primo campo > 12 è sicuramente il giorno
+      if (parseInt(a) > 12) return \`\${year}-\${b.padStart(2,"0")}-\${a.padStart(2,"0")}\`;
+      // Altrimenti assumiamo DD/MM (europeo)
+      return \`\${year}-\${b.padStart(2,"0")}-\${a.padStart(2,"0")}\`;
+    }
+    return "";
+  };
+
+  // 10. Helper: null check
+  const isNull = (s) => !s || s.trim().toUpperCase() === "NULL" || s.trim() === "NULL;";
+
+  // 11. Scansiona righe dati (dopo l'header, fino alla fine)
+  const bonds = [], errs = [];
+
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim()) continue; // riga vuota
+
+    const row = line.split(sep);
+
+    // Salta righe prive di ISIN valido (righe totale, footer, ecc.)
+    const isinRaw = c.isin >= 0 ? (row[c.isin] || "").trim().replace(/['"]/g, "") : "";
+    if (!isinRaw || isinRaw.length < 8 || /^;+$/.test(line)) continue;
+
+    // Salta righe che sembrano subtotali (solo Peso popolato, resto vuoto)
+    const nonEmptyCells = row.filter(x => x.trim() && x.trim().toUpperCase() !== "NULL").length;
+    if (nonEmptyCells < 4) continue;
+
+    const callRaw  = g(row, "callDate");
+    const ytcRaw   = g(row, "yldToCall");
+    const durRaw   = g(row, "duration");
+
+    // Inferisci tipo da issuer/nome se non presente
+    const tipoRaw = g(row, "tipo");
+    let tipo = tipoRaw || "Corporate";
+    if (!tipoRaw) {
+      const issLow = g(row, "issuer").toLowerCase() + g(row, "name").toLowerCase();
+      if (issLow.includes("government") || issLow.includes("republic") ||
+          issLow.includes("kingdom")    || issLow.includes("gv ") ||
+          issLow.includes("bund")       || issLow.includes("treasury")) {
+        tipo = "Governativo";
+      } else if (issLow.includes("bank") || issLow.includes("reconstruction") ||
+                 issLow.includes("invest") || issLow.includes("ebrd") ||
+                 issLow.includes("eib")    || issLow.includes("world bank") ||
+                 issLow.includes("cassa depositi")) {
+        tipo = "Sovranazionale";
+      }
+    }
 
     bonds.push({
-      valuta:   g("valuta")||"EUR",
-      issuer:   g("issuer")||"—",
-      isin:     g("isin"),
-      name:     g("name")||g("isin"),
-      scadenza: g("scadenza"),
-      callDate: callD||"",
-      cedola:   gn("cedola"),
-      ask:      gn("ask",100),
-      yldYtm:   gn("yldYtm"),
-      yldToCall:ytc?parseFloat(ytc):null,
-      duration: gn("duration")||null,
-      taglioMin:gn("taglioMin",1000),
-      rating:   g("rating")||"ND",
-      peso,
-      tipo:     g("tipo")||"Corporate",
-      seniority:normalizeSeniority(g("seniority")),
-      tipoCedola:normalizeCouponType(g("tipoCedola")),
-      couponFreq:gn("couponFreq",1)||1,
-      sector:   g("sector")||"—",
-      ammEmesso:gn("ammEmesso"),
+      valuta:     g(row, "valuta")  || "EUR",
+      issuer:     g(row, "issuer")  || "—",
+      isin:       isinRaw,
+      name:       g(row, "name")    || isinRaw,
+      scadenza:   parseDate(g(row, "scadenza")),
+      callDate:   isNull(callRaw)   ? "" : parseDate(callRaw),
+      cedola:     parseNum(g(row, "cedola")),
+      ask:        parseNum(g(row, "ask"), 100),
+      yldYtm:     parseNum(g(row, "yldYtm")),
+      yldToCall:  isNull(ytcRaw)    ? null : parseNum(ytcRaw) || null,
+      duration:   isNull(durRaw)    ? null : parseNum(durRaw) || null,
+      taglioMin:  parseNum(g(row, "taglioMin"), 1000),
+      rating:     g(row, "rating")  || "ND",
+      peso:       parsePeso(g(row, "peso")),
+      tipo,
+      seniority:  normalizeSeniority(g(row, "seniority")),
+      tipoCedola: normalizeCouponType(g(row, "tipoCedola")),
+      couponFreq: parseNum(g(row, "couponFreq"), 1) || 1,
+      sector:     g(row, "sector")  || "—",
+      ammEmesso:  parseNum(g(row, "ammEmesso")),
     });
   }
-  if(!bonds.length) return {error:"Nessun titolo valido trovato."};
-  return {bonds,errs};
+
+  if (!bonds.length) return { error: "Nessun titolo valido trovato. Verifica che il file abbia una colonna ISIN." };
+  return { bonds, errs };
 }
 
 function downloadCSVTemplate() {
-  const h="valuta;issuer;isin;name;scadenza;callDate;cedola;ask;yldYtm;yldToCall;duration;taglioMin;rating;peso;tipo;seniority;tipoCedola;couponFreq;sector;ammEmesso";
-  const e="EUR;EXAMPLE CORP;XS1234567890;EXAMPLE 3.500 01/15/30;2030-01-15;2029-10-15;3.5;101.5;3.2;3.1;4.8;1000;BBB+;5;Corporate;Senior Unsecured;Fixed;1;Utilities;500000000";
-  const w=window.open("","_blank","width=700,height=220");
-  if(w){w.document.write(`<pre style="font-family:monospace;padding:20px;font-size:12px">${h}\n${e}</pre><p style="padding:0 20px;font-family:sans-serif;font-size:12px;color:#666">Copia e salva come .csv (separatore punto e virgola)</p>`);w.document.title="Template CSV";}
+  // Template nel formato esatto del file reale (separatore ;, date DD/MM/YYYY, numeri con virgola, peso con %)
+  const rows = [
+    "Valuta;Issuer Name;ISIN;Security Name;Scadenza;Call Date;Cedola;Ask;Yld Ytm Ask;Yld to Call;Duration;Taglio Minimo;Rating;Peso;Tipo Cedola;Seniority;Coupon Fred;Economic Sector;Ammontare Emesso",
+    "EUR;EXAMPLE CORP SPA;XS1234567890;EXCORP 3.500 01/15/30;15/01/2030;15/10/2029;3,50;101,50;3,20;3,10;4,80;1000;BBB+;10,0%;Fixed:Plain Vanilla Fixed Coupon;Senior Unsecured;1,00;Utilities; $500.000.000,00 ",
+    "EUR;EXAMPLE GOV;IT0000000001;ITGV 2.000 03/01/31;01/03/2031;NULL;2,00;98,50;2,35;NULL;5,20;1000;BBB+;15,0%;Fixed:Plain Vanilla Fixed Coupon;Senior Unsecured;2,00;Government Activity; $10.000.000.000,00 ",
+  ].join("\r\n");
+
+  const w = window.open("", "_blank", "width=900,height=320");
+  if (w) {
+    w.document.write(\`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Template CSV BondAnalyst</title></head><body style="font-family:sans-serif;padding:24px">
+      <h3 style="margin:0 0 8px;font-size:15px">Template CSV — BondAnalyst</h3>
+      <p style="font-size:12px;color:#666;margin:0 0 12px">Formato esatto atteso dal parser. Separatore: <b>punto e virgola (;)</b> · Date: <b>GG/MM/AAAA</b> · Numeri: <b>virgola decimale</b> · Peso: <b>con simbolo %</b></p>
+      <pre style="background:#f4f4f0;border:1px solid #e5e7eb;border-radius:8px;padding:16px;font-size:11px;overflow-x:auto;white-space:pre">\${rows}</pre>
+      <p style="font-size:11px;color:#9ca3af;margin-top:12px">Copia il testo sopra, incollalo in un file di testo e salvalo con estensione .csv</p>
+    </body></html>\`);
+    w.document.close();
+  }
 }
 
 // ─── HELPERS REPORT ──────────────────────────────────────────────────────────
@@ -342,6 +561,7 @@ const EMPTY_BOND = {
 };
 
 export default function App() {
+  useGlobalCSS();
   const [bonds,setBonds]               = useState(INITIAL_BONDS);
   const [totale,setTotale]             = useState(100000);
   const [rawTotale,setRawTotale]       = useState("100000"); // stringa per input controllato
@@ -432,14 +652,34 @@ export default function App() {
   };
   const onCSV=useCallback(e=>{
     const f=e.target.files[0];if(!f)return;setCsvMsg(null);
+    // Tenta prima UTF-8, poi latin-1 come fallback (file Excel italiani)
+    const tryParse=(text)=>{
+      const res=parseCSV(text);
+      if(res.error) return res;
+      if(!res.bonds.length) return {error:"Nessun titolo trovato dopo il parsing."};
+      return res;
+    };
     const r=new FileReader();
     r.onload=ev=>{
-      const res=parseCSV(ev.target.result);
-      if(res.error){setCsvMsg({ok:false,text:res.error});return;}
+      let res=tryParse(ev.target.result);
+      if(res.error){
+        // Fallback: rileggi come latin-1
+        const r2=new FileReader();
+        r2.onload=ev2=>{
+          res=tryParse(ev2.target.result);
+          if(res.error){setCsvMsg({ok:false,text:res.error});return;}
+          setBonds(res.bonds);
+          const warn=res.errs?.length?` · ${res.errs.length} righe ignorate`:"";
+          setCsvMsg({ok:true,text:`✓ Caricati ${res.bonds.length} titoli${warn}.`});
+        };
+        r2.readAsText(f,"latin-1");
+        return;
+      }
       setBonds(res.bonds);
-      setCsvMsg({ok:true,text:`✓ Caricati ${res.bonds.length} titoli${res.errs?.length?` (${res.errs.length} righe ignorate)`:""}.`});
+      const warn=res.errs?.length?` · ${res.errs.length} righe ignorate`:"";
+      setCsvMsg({ok:true,text:`✓ Caricati ${res.bonds.length} titoli${warn}.`});
     };
-    r.readAsText(f);e.target.value="";
+    r.readAsText(f,"utf-8");e.target.value="";
   },[]);
 
   // ── Stili condivisi ────────────────────────────────────────────────────────
@@ -515,7 +755,7 @@ export default function App() {
   };
 
   return (
-    <div style={{minHeight:"100vh",background:C.bg,fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif",color:C.dark}}>
+    <div className="ba-page" style={{background:C.bg,fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif",color:C.dark}}>
 
       {/* ── NAVBAR ──────────────────────────────────────────────────────────── */}
       <nav style={{background:C.card,borderBottom:`1px solid ${C.border}`,position:"sticky",top:0,zIndex:100,boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
@@ -543,7 +783,7 @@ export default function App() {
       </nav>
 
       {csvMsg&&(
-        <div style={{maxWidth:1600,margin:"12px auto 0",padding:"0 28px"}}>
+        <div style={{maxWidth:1600,margin:"12px auto 0",padding:"0 20px"}}>
           <div style={{background:csvMsg.ok?"#f0fdf4":"#fef2f2",border:`1px solid ${csvMsg.ok?"#86efac":"#fecaca"}`,borderRadius:10,padding:"10px 16px",color:csvMsg.ok?"#166534":"#991b1b",fontSize:13,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <span>{csvMsg.text}</span>
             <button onClick={()=>setCsvMsg(null)} style={{background:"none",border:"none",cursor:"pointer",fontSize:16,color:"inherit"}}>×</button>
@@ -551,18 +791,18 @@ export default function App() {
         </div>
       )}
 
-      <div style={{maxWidth:1600,margin:"0 auto",padding:"20px max(12px, min(28px, 2vw))"}}>
+      <div className="ba-inner">
 
         {/* ═══════════════ PANORAMICA ══════════════════════════════════════ */}
         {activeTab==="overview"&&(
           <div>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:24}}>
+            <div className="ba-overview-header">
               <div>
                 <p style={{fontSize:11,color:C.gray,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:4}}>Portafoglio</p>
                 <h1 style={{fontSize:30,fontWeight:800,letterSpacing:"-.6px"}}>Dashboard Obbligazionario</h1>
                 <p style={{color:C.gray,fontSize:13,marginTop:4}}>{bonds.length} titoli · duration ponderata {stats.wtdDuration.toFixed(2)} anni</p>
               </div>
-              <div style={{...card,padding:"16px 22px",display:"flex",alignItems:"center",gap:16,minWidth:280}}>
+              <div className="ba-totale-card" style={{...card,padding:"16px 22px",display:"flex",alignItems:"center",gap:16}}>
                 <div style={{flex:1}}>
                   <p style={{fontSize:10,color:C.gray,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:4}}>Importo Effettivo</p>
                   <div style={{display:"flex",alignItems:"baseline",gap:4}}>
@@ -589,7 +829,7 @@ export default function App() {
             </div>
 
             {/* KPI importi */}
-            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:14}}>
+            <div className="ba-grid-3" style={{marginBottom:14}}>
               {[
                 {icon:"💰",l:"Importo Effettivo",  v:fe(stats.totEffettivo),   s:"Totale pagato al mercato",          vc:C.dark, bg:C.card},
                 {icon:"📋",l:"Importo Nominale",    v:fe(stats.totNominale),    s:"Valore facciale dei titoli",        vc:C.green,bg:C.greenL},
@@ -611,7 +851,7 @@ export default function App() {
             </div>
 
             {/* KPI metriche */}
-            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:22}}>
+            <div className="ba-grid-4" style={{marginBottom:22}}>
               {[
                 {l:"YTM Ponderato",  v:fp(stats.wtdYtm),              s:"Yield to Maturity",      y:true },
                 {l:"Cedola Media",   v:fp(stats.wtdCedola),            s:"Tasso cedolare medio",   y:false},
@@ -626,7 +866,7 @@ export default function App() {
               ))}
             </div>
 
-            <div style={{display:"grid",gridTemplateColumns:"3fr 2fr",gap:16}}>
+            <div className="ba-chart-row">
               <div style={{...card,padding:"22px 24px"}}>
                 <SL>Flusso Cedolare Mensile — sul nominale (€)</SL>
                 <ResponsiveContainer width="100%" height={200}>
@@ -669,8 +909,8 @@ export default function App() {
         {/* ═══════════════ TITOLI ══════════════════════════════════════════ */}
         {activeTab==="bonds"&&(
           <div>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18,flexWrap:"wrap",gap:12}}>
-              <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+            <div className="ba-bonds-header">
+              <div className="ba-bonds-filters">
                 <h2 style={{fontSize:22,fontWeight:800}}>Titoli</h2>
                 <span style={{background:C.lgray,color:C.gray,borderRadius:20,padding:"3px 10px",fontSize:12,fontWeight:700}}>{filtered.length}/{bonds.length}</span>
                 {["Tutti","Governativo","Corporate","Sovranazionale"].map(t=>(
@@ -703,8 +943,8 @@ export default function App() {
             </div>
 
             <div style={{...card,padding:0,overflow:"hidden"}}>
-              <div style={{overflowX:"auto"}}>
-                <table style={{width:"100%",borderCollapse:"collapse",fontSize:11.5}}>
+              <div className="ba-table-wrap">
+                <table className="ba-table-bonds" style={{borderCollapse:"collapse",fontSize:11.5}}>
                   <thead>
                     <tr>
                       {["CCY","Emittente","ISIN","Nome","Tipo","Seniority","Settore","Scad.","Call","Ced%","Ask","CY%","YTM%","YTC%","Dur","Freq","Rating","Peso%","Nom.€","Eff.€*","Ced.€*",""].map(h=>(
@@ -839,7 +1079,7 @@ export default function App() {
         {activeTab==="cedole"&&(
           <div>
             <h2 style={{fontSize:22,fontWeight:800,marginBottom:18}}>Flusso Cedolare</h2>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(12,1fr)",gap:8,marginBottom:18}}>
+            <div className="ba-grid-12" style={{marginBottom:18}}>
               {monthlyData.map((m,i)=>(
                 <div key={i} style={{...card,padding:"12px 8px",textAlign:"center",background:m.cedola>0?C.yellowL:C.card,border:`1px solid ${m.cedola>0?C.yellowB:C.border}`}}>
                   <p style={{fontSize:9,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:5,color:m.cedola>0?"#92400e":C.gray}}>{m.month}</p>
@@ -862,8 +1102,8 @@ export default function App() {
               </ResponsiveContainer>
             </div>
             <div style={{...card,padding:0,overflow:"hidden"}}>
-              <div style={{overflowX:"auto"}}>
-                <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+              <div className="ba-table-wrap">
+                <table className="ba-table-cedole" style={{borderCollapse:"collapse",fontSize:11}}>
                   <thead>
                     <tr>
                       <th style={{...TH,position:"sticky",left:0,zIndex:10}}>ISIN</th>
@@ -914,7 +1154,7 @@ export default function App() {
         {/* ═══════════════ SCADENZE ════════════════════════════════════════ */}
         {activeTab==="scadenze"&&(
           <div>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18,gap:12,flexWrap:"wrap"}}>
+            <div className="ba-scad-header">
               <h2 style={{fontSize:22,fontWeight:800}}>Profilo di Scadenza</h2>
               <div style={{...card,padding:"12px 20px",display:"flex",alignItems:"center",gap:20}}>
                 <span style={{fontSize:11,color:C.gray,fontWeight:700}}>Scenario:</span>
@@ -947,8 +1187,8 @@ export default function App() {
               </ResponsiveContainer>
             </div>
             <div style={{...card,padding:0,overflow:"hidden"}}>
-              <div style={{overflowX:"auto"}}>
-                <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+              <div className="ba-table-wrap">
+                <table style={{minWidth:900,width:"100%",borderCollapse:"collapse",fontSize:12}}>
                   <thead>
                     <tr>{["ISIN","Emittente","Tipo","Seniority","Scadenza","Call","Rating","Peso%","Nom.€","Eff.€","CY%","YTM%","YTC%"].map(h=>(
                       <th key={h} style={{...TH,...(h==="CY%"?{color:"#d97706"}:{})}}>{h}</th>
@@ -993,14 +1233,14 @@ export default function App() {
             <h2 style={{fontSize:22,fontWeight:800,marginBottom:20}}>Composizione Portafoglio</h2>
 
             {/* Riga 1: Rating + Tipo + Seniority */}
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16,marginBottom:16}}>
+            <div className="ba-comp-row1">
               <MiniPie data={ratingData}    colorMap={RATING_COLORS}    title="Per Rating"/>
               <MiniPie data={tipoData}      colorMap={TIPO_COLORS}      title="Per Tipologia"/>
               <MiniPie data={seniData}      colorMap={SENIORITY_COLORS} title="Per Seniority / Subordinazione"/>
             </div>
 
             {/* Riga 2: Settore + Valuta + Tipo Cedola */}
-            <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",gap:16,marginBottom:16}}>
+            <div className="ba-comp-row2">
 
               {/* Settore — barchart orizzontale (più leggibile con tanti settori) */}
               <div style={{...card,padding:"22px 24px"}}>
@@ -1025,7 +1265,7 @@ export default function App() {
             {/* Riga 3: Metriche aggregate */}
             <div style={{...card,padding:"22px 24px"}}>
               <SL>Metriche Aggregate</SL>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:12}}>
+              <div className="ba-metrics">
                 {[
                   ["YTM Ponderato",   fp(stats.wtdYtm),               C.green],
                   ["CY Media Pond.",  fp(bonds.reduce((s,b)=>s+calcCurrentYield(b)*b.peso/100,0)), "#d97706"],
@@ -1066,7 +1306,7 @@ function AddForm({form,setForm}) {
     </div>
   );
   return(
-    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(180px, 1fr))",gap:10}}>
       <F k="valuta"     l="Valuta"      opts={["EUR","USD","GBP","CHF","JPY"]}/>
       <F k="isin"       l="ISIN"        t="text"/>
       <F k="name"       l="Nome Titolo" t="text"/>
