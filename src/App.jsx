@@ -333,9 +333,9 @@ function parseCSV(text) {
     if (m) {
       const [, a, b, year] = m;
       // Se primo campo > 12 è sicuramente il giorno
-      if (parseInt(a) > 12) return \`\${year}-\${b.padStart(2,"0")}-\${a.padStart(2,"0")}\`;
+      if (parseInt(a) > 12) return `${year}-${b.padStart(2,"0")}-${a.padStart(2,"0")}`;
       // Altrimenti assumiamo DD/MM (europeo)
-      return \`\${year}-\${b.padStart(2,"0")}-\${a.padStart(2,"0")}\`;
+      return `${year}-${b.padStart(2,"0")}-${a.padStart(2,"0")}`;
     }
     return "";
   };
@@ -410,21 +410,73 @@ function parseCSV(text) {
 }
 
 function downloadCSVTemplate() {
-  // Template nel formato esatto del file reale (separatore ;, date DD/MM/YYYY, numeri con virgola, peso con %)
-  const rows = [
-    "Valuta;Issuer Name;ISIN;Security Name;Scadenza;Call Date;Cedola;Ask;Yld Ytm Ask;Yld to Call;Duration;Taglio Minimo;Rating;Peso;Tipo Cedola;Seniority;Coupon Fred;Economic Sector;Ammontare Emesso",
-    "EUR;EXAMPLE CORP SPA;XS1234567890;EXCORP 3.500 01/15/30;15/01/2030;15/10/2029;3,50;101,50;3,20;3,10;4,80;1000;BBB+;10,0%;Fixed:Plain Vanilla Fixed Coupon;Senior Unsecured;1,00;Utilities; $500.000.000,00 ",
-    "EUR;EXAMPLE GOV;IT0000000001;ITGV 2.000 03/01/31;01/03/2031;NULL;2,00;98,50;2,35;NULL;5,20;1000;BBB+;15,0%;Fixed:Plain Vanilla Fixed Coupon;Senior Unsecured;2,00;Government Activity; $10.000.000.000,00 ",
-  ].join("\r\n");
+  // 18 colonne — formato esatto del file di caricamento ufficiale
+  // Separatore: ; | Date: GG/MM/AAAA | Decimali: virgola | Peso: con % | NULL per valori assenti
+  const HDR = "Valuta;Issuer Name;ISIN;Security Name;Scadenza;Call Date;Cedola;Ask;Yld Ytm Ask;Yld to Call;Duration;Taglio Minimo;Rating;Peso;Tipo Cedola;Seniority;Coupon Fred;Economic Sector";
+  const EX1 = "EUR;EXAMPLE CORP SPA;XS1234567890;EXCORP 3.500 15/01/30;15/01/2030;15/10/2029;3,50;101,50;3,20;3,10;4,80;1000;BBB+;10,00%;Fixed:Plain Vanilla Fixed Coupon;Senior Unsecured;1;Utilities";
+  const EX2 = "EUR;EXAMPLE ISSUER GOV;IT0000000001;ITGV 2.000 01/03/31;01/03/2031;NULL;2,00;98,50;2,35;NULL;5,20;1000;BBB+;15,00%;Fixed:Plain Vanilla Fixed Coupon;Senior Unsecured;2;Government Activity";
+  const EX3 = "EUR;EXAMPLE BANK AT1;XS9999999999;EXBK 5.000 01/06/32;01/06/2032;01/03/2032;5,00;99,00;5,15;5,10;4,20;200000;BB+;5,00%;Fixed:Plain Vanilla Fixed Coupon;AT1;1;Financials";
+  const rows = [HDR, EX1, EX2, EX3].join("\r\n");
 
-  const w = window.open("", "_blank", "width=900,height=320");
+  const legend = [
+    ["Valuta",        "Codice ISO: EUR, USD, GBP…"],
+    ["Issuer Name",   "Nome emittente (testo libero)"],
+    ["ISIN",          "Codice ISIN 12 caratteri"],
+    ["Security Name", "Nome del titolo"],
+    ["Scadenza",      "GG/MM/AAAA"],
+    ["Call Date",     "GG/MM/AAAA oppure NULL"],
+    ["Cedola",        "Tasso % con virgola: 3,50"],
+    ["Ask",           "Prezzo con virgola: 101,50"],
+    ["Yld Ytm Ask",   "YTM con virgola: 3,20"],
+    ["Yld to Call",   "YTC con virgola, oppure NULL"],
+    ["Duration",      "Modified duration, oppure NULL"],
+    ["Taglio Minimo", "Intero: 1000, 200000, 1…"],
+    ["Rating",        "AAA / AA+ / BBB- / ND …"],
+    ["Peso",          "Percentuale con %: 10,00%"],
+    ["Tipo Cedola",   "Fixed:Plain Vanilla Fixed Coupon | Variable: Step Up/Step Down | …"],
+    ["Seniority",     "Senior Unsecured | Senior Secured | Tier 2 | AT1 | Junior Subordinated"],
+    ["Coupon Fred",   "Frequenza annua: 1=annuale 2=semestrale 4=trimestrale 12=mensile"],
+    ["Economic Sector","Government Activity | Utilities | Financials | Healthcare | …"],
+  ].map(([col,desc]) =>
+    `<tr><td style="padding:4px 10px;font-weight:700;white-space:nowrap;font-family:monospace;font-size:11px">${col}</td>` +
+    `<td style="padding:4px 10px;font-size:11px;color:#374151">${desc}</td></tr>`
+  ).join("");
+
+  const w = window.open("", "_blank", "width=960,height=600");
   if (w) {
-    w.document.write(\`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Template CSV BondAnalyst</title></head><body style="font-family:sans-serif;padding:24px">
-      <h3 style="margin:0 0 8px;font-size:15px">Template CSV — BondAnalyst</h3>
-      <p style="font-size:12px;color:#666;margin:0 0 12px">Formato esatto atteso dal parser. Separatore: <b>punto e virgola (;)</b> · Date: <b>GG/MM/AAAA</b> · Numeri: <b>virgola decimale</b> · Peso: <b>con simbolo %</b></p>
-      <pre style="background:#f4f4f0;border:1px solid #e5e7eb;border-radius:8px;padding:16px;font-size:11px;overflow-x:auto;white-space:pre">\${rows}</pre>
-      <p style="font-size:11px;color:#9ca3af;margin-top:12px">Copia il testo sopra, incollalo in un file di testo e salvalo con estensione .csv</p>
-    </body></html>\`);
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+    <title>Template CSV — BondAnalyst</title>
+    <style>body{font-family:-apple-system,sans-serif;padding:28px;background:#fafafa;color:#111}
+    h2{font-size:16px;font-weight:800;margin:0 0 4px}
+    .sub{font-size:12px;color:#6b7280;margin-bottom:18px}
+    .card{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:16px;margin-bottom:16px}
+    .card h3{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#9ca3af;margin:0 0 10px}
+    pre{background:#f4f4f0;border-radius:6px;padding:12px;font-size:10.5px;overflow-x:auto;white-space:pre;line-height:1.6;border:1px solid #e5e7eb}
+    table{border-collapse:collapse;width:100%}td{border-bottom:1px solid #f3f4f6;vertical-align:top}
+    tr:last-child td{border:none}
+    .badge{display:inline-block;background:#f5c842;color:#111;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;margin-right:6px}
+    .btn{display:inline-block;background:#1a1a1a;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:12px;font-weight:700;cursor:pointer;margin-bottom:16px}
+    </style></head><body>
+    <h2>Template CSV — BondAnalyst</h2>
+    <div class="sub">
+      <span class="badge">;</span> Separatore punto e virgola &nbsp;|&nbsp;
+      <span class="badge">GG/MM/AAAA</span> Formato date &nbsp;|&nbsp;
+      <span class="badge">,</span> Decimale virgola &nbsp;|&nbsp;
+      <span class="badge">%</span> Peso con simbolo percentuale
+    </div>
+    <button class="btn" onclick="
+      const pre = document.querySelector('pre');
+      navigator.clipboard.writeText(pre.textContent).then(()=>{this.textContent='✓ Copiato!';setTimeout(()=>this.textContent='📋 Copia CSV',1500)});
+    ">📋 Copia CSV</button>
+    <div class="card">
+      <h3>CSV da copiare e salvare come .csv</h3>
+      <pre>${rows}</pre>
+    </div>
+    <div class="card">
+      <h3>Guida alle colonne (18 colonne, separatore ;)</h3>
+      <table><tbody>${legend}</tbody></table>
+    </div>
+    </body></html>`);
     w.document.close();
   }
 }
@@ -455,71 +507,187 @@ function buildCompositionSection(title, data, colorMap) {
 
 // ─── REPORT ───────────────────────────────────────────────────────────────────
 function openReport(bonds,totale,stats,monthlyData) {
-  const today=new Date().toLocaleDateString("it-IT");
-  const totNom=bonds.reduce((s,b)=>s+calcNominale(b,totale),0);
-  const totEff=bonds.reduce((s,b)=>s+calcEffettivo(b,totale),0);
-  const totCed=bonds.reduce((s,b)=>s+calcCouponAnnuo(b,totale),0);
-  const rows=bonds.map(b=>`<tr>
+  const today  = new Date().toLocaleDateString("it-IT");
+  const totNom = bonds.reduce((s,b)=>s+calcNominale(b,totale),0);
+  const totEff = bonds.reduce((s,b)=>s+calcEffettivo(b,totale),0);
+  const totCed = bonds.reduce((s,b)=>s+calcCouponAnnuo(b,totale),0);
+  const ytmMin = bonds.length ? Math.min(...bonds.map(b=>b.yldYtm)) : 0;
+  const ytmMax = bonds.length ? Math.max(...bonds.map(b=>b.yldYtm)) : 0;
+
+  // ── Tabella dettaglio titoli ──────────────────────────────────────────────
+  const rows = bonds.map(b=>`<tr>
     <td style="font-size:9px;font-family:monospace;color:#555">${b.isin}</td>
     <td>${b.name}</td><td>${b.tipo}</td><td>${b.seniority||""}</td><td>${b.sector||""}</td>
-    <td>${b.scadenza}</td><td>${b.callDate||"—"}</td>
+    <td>${b.scadenza}</td><td style="color:${b.callDate?"#d97706":"#ccc"}">${b.callDate||"—"}</td>
     <td align="right">${fp(b.cedola)}</td><td align="right">${Number(b.ask).toFixed(3)}</td>
     <td align="right"><b style="color:#1a5276">${fp(b.yldYtm)}</b></td>
-    <td align="right">${b.yldToCall?fp(b.yldToCall):"—"}</td>
-    <td align="right">${fp(b.peso,4)}</td>
+    <td align="right" style="color:#d97706">${b.yldToCall?fp(b.yldToCall):"—"}</td>
+    <td align="right">${fp(b.peso,2)}</td>
     <td align="right" style="color:#15803d"><b>${fe(calcNominale(b,totale))}</b></td>
     <td align="right" style="color:#1e40af">${fe(calcEffettivo(b,totale))}</td>
     <td align="right" style="color:#92400e">${fe(calcCouponAnnuo(b,totale))}</td>
   </tr>`).join("");
-  const cedRow=monthlyData.map(m=>`<td align="right" style="${m.cedola>0?"background:#fffbeb;color:#92400e;font-weight:700":"color:#ccc"}">${m.cedola>0?fe(m.cedola):"—"}</td>`).join("");
-  const html=`<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><title>Report Portafoglio · ${today}</title>
-<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,sans-serif;font-size:11px;background:#fff;color:#111;padding:36px}
-@media print{body{padding:12px}button{display:none}}
+
+  // ── Flusso cedolare ───────────────────────────────────────────────────────
+  const cedRow = monthlyData.map(m=>
+    `<td align="right" style="${m.cedola>0?"background:#fffbeb;color:#92400e;font-weight:700":"color:#ccc"}">${m.cedola>0?fe(m.cedola):"—"}</td>`
+  ).join("");
+
+  // ── Grafico scadenze/call in SVG puro ─────────────────────────────────────
+  // Aggrega pesi per mese/anno, separando scadenza e call
+  const scadMap = {}, callMap = {};
+  bonds.forEach(b=>{
+    if(b.scadenza){
+      const k = b.scadenza.substring(0,7); // "YYYY-MM"
+      scadMap[k] = (scadMap[k]||0) + b.peso;
+    }
+    if(b.callDate){
+      const k = b.callDate.substring(0,7);
+      callMap[k] = (callMap[k]||0) + b.peso;
+    }
+  });
+  const allKeys = [...new Set([...Object.keys(scadMap),...Object.keys(callMap)])].sort();
+  const svgW=680, svgH=160, padL=38, padR=12, padT=12, padB=36;
+  const chartW = svgW-padL-padR, chartH = svgH-padT-padB;
+  const maxPeso = Math.max(...allKeys.map(k=>(scadMap[k]||0)+(callMap[k]||0)), 1);
+  const barW = Math.min(Math.floor(chartW/allKeys.length)-4, 36);
+  const slot = chartW/allKeys.length;
+
+  // Y axis ticks
+  const yTicks = [0, Math.ceil(maxPeso/2), Math.ceil(maxPeso)];
+  const yGrid  = yTicks.map(v=>{
+    const y = padT + chartH - (v/maxPeso)*chartH;
+    return `<line x1="${padL}" x2="${svgW-padR}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" stroke="#f3f4f6" stroke-width="1"/>
+            <text x="${(padL-4).toFixed(1)}" y="${(y+3).toFixed(1)}" text-anchor="end" font-size="8" fill="#9ca3af">${v.toFixed(0)}%</text>`;
+  }).join("");
+
+  const bars = allKeys.map((k,i)=>{
+    const pM = scadMap[k]||0, pC = callMap[k]||0;
+    const x  = padL + i*slot + (slot-barW)/2;
+    // Label mese/anno abbreviato: "MM/YY"
+    const [yr,mo] = k.split("-");
+    const lbl = `${mo}/${yr.slice(2)}`;
+    const bM  = (pM/maxPeso)*chartH, bC = (pC/maxPeso)*chartH;
+    const yM  = padT+chartH-bM, yC = padT+chartH-bC;
+    const bW2 = Math.max(Math.floor(barW/2)-1, 4);
+    const xM  = x, xC = x+bW2+2;
+    let out = `<text x="${(xM+barW/2).toFixed(1)}" y="${(padT+chartH+14).toFixed(1)}" text-anchor="middle" font-size="7.5" fill="#6b7280">${lbl}</text>`;
+    if(pM>0) out += `<rect x="${xM.toFixed(1)}" y="${yM.toFixed(1)}" width="${bW2}" height="${bM.toFixed(1)}" fill="#3b82f6" rx="2"/>
+      <text x="${(xM+bW2/2).toFixed(1)}" y="${(yM-3).toFixed(1)}" text-anchor="middle" font-size="7" fill="#3b82f6">${pM.toFixed(0)}%</text>`;
+    if(pC>0) out += `<rect x="${xC.toFixed(1)}" y="${yC.toFixed(1)}" width="${bW2}" height="${bC.toFixed(1)}" fill="#f5c842" rx="2"/>
+      <text x="${(xC+bW2/2).toFixed(1)}" y="${(yC-3).toFixed(1)}" text-anchor="middle" font-size="7" fill="#d97706">${pC.toFixed(0)}%</text>`;
+    return out;
+  }).join("");
+
+  const legend = `<rect x="${padL}" y="${(svgH-10).toFixed(1)}" width="10" height="7" fill="#3b82f6" rx="1"/>
+    <text x="${(padL+13).toFixed(1)}" y="${(svgH-4).toFixed(1)}" font-size="8" fill="#6b7280">A scadenza</text>
+    <rect x="${(padL+80).toFixed(1)}" y="${(svgH-10).toFixed(1)}" width="10" height="7" fill="#f5c842" rx="1"/>
+    <text x="${(padL+93).toFixed(1)}" y="${(svgH-4).toFixed(1)}" font-size="8" fill="#6b7280">A call</text>`;
+
+  const svgChart = `<svg xmlns="http://www.w3.org/2000/svg" width="${svgW}" height="${svgH}" style="width:100%;max-width:${svgW}px">
+    ${yGrid}${bars}${legend}
+    <line x1="${padL}" x2="${padL}" y1="${padT}" y2="${padT+chartH}" stroke="#e5e7eb" stroke-width="1"/>
+    <line x1="${padL}" x2="${svgW-padR}" y1="${(padT+chartH).toFixed(1)}" y2="${(padT+chartH).toFixed(1)}" stroke="#e5e7eb" stroke-width="1"/>
+  </svg>`;
+
+  const html = `<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8">
+<title>Report Portafoglio · ${today}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:11px;background:#fff;color:#111;padding:36px}
+@media print{body{padding:14px}button{display:none!important}.page-break{page-break-before:always}}
 .hdr{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #f5c842;padding-bottom:14px;margin-bottom:20px}
 h1{font-size:22px;font-weight:800;color:#1a1a1a}.sub{font-size:10px;color:#9ca3af;margin-top:3px}
-.meta{font-size:10px;color:#6b7280;text-align:right;line-height:1.9}
-.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:22px}
-.kpi{background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:12px 14px}.kpi.y{background:#fffbeb;border-color:#fde68a}
-.kpi .l{font-size:8px;color:#9ca3af;text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px;font-weight:700}
-.kpi .v{font-size:17px;font-weight:800;color:#1a1a1a}.kpi.y .v{color:#92400e}
-.sec{font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.1em;border-bottom:2px solid #f3f4f6;padding-bottom:5px;margin:18px 0 10px}
-table{width:100%;border-collapse:collapse;margin-bottom:18px}th{background:#1a1a1a;color:#fff;padding:6px 5px;font-size:8px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap}
-td{padding:5px 5px;border-bottom:1px solid #f3f4f6;font-size:10px}tr:nth-child(even) td{background:#fafafa}
+.meta{font-size:10px;color:#6b7280;text-align:right;line-height:2}
+/* KPI grid — 7 colonne */
+.kpis{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:20px}
+.kpi{background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px}
+.kpi.y{background:#fffbeb;border-color:#fde68a}
+.kpi.g{background:#f0fdf4;border-color:#bbf7d0}
+.kpi.r{background:#fff1f2;border-color:#fecdd3}
+.kpi .l{font-size:7.5px;color:#9ca3af;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;font-weight:700}
+.kpi .v{font-size:15px;font-weight:800;color:#1a1a1a}
+.kpi.y .v{color:#92400e}.kpi.g .v{color:#15803d}.kpi.r .v{color:#dc2626}
+.sec{font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.1em;
+  border-bottom:2px solid #f3f4f6;padding-bottom:5px;margin:18px 0 10px;display:flex;align-items:center;gap:8px}
+.sec-note{font-size:9px;font-weight:400;color:#9ca3af;text-transform:none;letter-spacing:0}
+table{width:100%;border-collapse:collapse;margin-bottom:16px}
+th{background:#1a1a1a;color:#fff;padding:5px 5px;font-size:7.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap}
+td{padding:4px 5px;border-bottom:1px solid #f3f4f6;font-size:9.5px}
+tr:nth-child(even) td{background:#fafafa}
 .tot td{font-weight:800;background:#fffbeb;border-top:2px solid #f5c842}
+.chart-box{border:1px solid #e5e7eb;border-radius:8px;padding:14px 16px;margin-bottom:16px;background:#fafafa}
+.chart-title{font-size:8px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px}
+.comp-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px}
 .foot{margin-top:20px;border-top:1px solid #e5e7eb;padding-top:8px;font-size:9px;color:#9ca3af;display:flex;justify-content:space-between}
-.pbtn{display:inline-block;margin-bottom:16px;background:#f5c842;color:#1a1a1a;border:none;border-radius:8px;padding:8px 18px;font-size:12px;font-weight:700;cursor:pointer}
+.pbtn{display:inline-block;margin-bottom:16px;background:#f5c842;color:#1a1a1a;border:none;border-radius:8px;
+  padding:8px 18px;font-size:12px;font-weight:700;cursor:pointer}
 </style></head><body>
 <button class="pbtn" onclick="window.print()">🖨 Stampa / Salva PDF</button>
+
 <div class="hdr">
-  <div><div style="font-size:9px;color:#9ca3af;letter-spacing:.15em;text-transform:uppercase;margin-bottom:4px">ANALISI PORTAFOGLIO</div>
-  <h1>Portafoglio Obbligazionario</h1><div class="sub">Generato il ${today} · ${bonds.length} titoli</div></div>
-  <div class="meta"><div>Importo effettivo: <b>${fe(totEff)}</b></div><div>Importo nominale: <b style="color:#15803d">${fe(totNom)}</b></div>
-  <div>Disaggio/Premio: <b style="color:${totNom-totEff>=0?"#15803d":"#dc2626"}">${totNom-totEff>=0?"+":""}${fe(totNom-totEff)}</b></div></div>
+  <div>
+    <div style="font-size:9px;color:#9ca3af;letter-spacing:.15em;text-transform:uppercase;margin-bottom:4px">ANALISI PORTAFOGLIO</div>
+    <h1>Portafoglio Obbligazionario</h1>
+    <div class="sub">Generato il ${today} &nbsp;·&nbsp; ${bonds.length} titoli &nbsp;·&nbsp; ${bonds.filter(b=>b.callDate).length} con opzione call</div>
+  </div>
+  <div class="meta">
+    <div>Importo effettivo: <b>${fe(totEff)}</b></div>
+    <div>Importo nominale: <b style="color:#15803d">${fe(totNom)}</b></div>
+    <div>Disaggio/Premio: <b style="color:${totNom-totEff>=0?"#15803d":"#dc2626"}">${totNom-totEff>=0?"+":""}${fe(totNom-totEff)}</b></div>
+  </div>
 </div>
+
+<!-- KPI: 7 card su una riga -->
 <div class="kpis">
-  <div class="kpi"><div class="l">YTM Ponderato</div><div class="v">${fp(stats.wtdYtm)}</div></div>
+  <div class="kpi y"><div class="l">YTM Ponderato</div><div class="v">${fp(stats.wtdYtm)}</div></div>
+  <div class="kpi g"><div class="l">YTM Minimo</div><div class="v">${fp(ytmMin)}</div></div>
+  <div class="kpi r"><div class="l">YTM Massimo</div><div class="v">${fp(ytmMax)}</div></div>
   <div class="kpi"><div class="l">Cedola Media</div><div class="v">${fp(stats.wtdCedola)}</div></div>
   <div class="kpi"><div class="l">Duration Media</div><div class="v">${Number(stats.wtdDuration).toFixed(2)} a</div></div>
   <div class="kpi y"><div class="l">Nominale Totale</div><div class="v">${fe(totNom)}</div></div>
   <div class="kpi y"><div class="l">Cedola Annua</div><div class="v">${fe(totCed)}</div></div>
 </div>
+
+<!-- Grafico Scadenze / Call -->
+<div class="sec">Profilo di Scadenza &amp; Call
+  <span class="sec-note">Barre affiancate: <span style="color:#3b82f6;font-weight:700">■ a scadenza</span> &nbsp; <span style="color:#d97706;font-weight:700">■ a call</span> &nbsp;— valori in % del portafoglio</span>
+</div>
+<div class="chart-box">
+  <div class="chart-title">Rimborso per data (% portafoglio)</div>
+  ${allKeys.length > 0 ? svgChart : '<p style="color:#9ca3af;font-size:11px;padding:12px 0">Nessuna scadenza disponibile.</p>'}
+</div>
+
+<!-- Dettaglio Titoli -->
 <div class="sec">Dettaglio Titoli</div>
-<table><thead><tr><th>ISIN</th><th>Nome</th><th>Tipo</th><th>Seniority</th><th>Settore</th><th>Scadenza</th><th>Call</th>
-<th>Ced%</th><th>Ask</th><th>YTM%</th><th>YTC%</th><th>Peso%</th><th>Nominale €</th><th>Effettivo €</th><th>Ced.Ann €</th>
-</tr></thead><tbody>${rows}</tbody>
-<tfoot class="tot"><tr><td colspan="11">TOTALE</td>
-<td align="right">${fp(bonds.reduce((s,b)=>s+b.peso,0),4)}</td>
-<td align="right" style="color:#15803d">${fe(totNom)}</td>
-<td align="right" style="color:#1e40af">${fe(totEff)}</td>
-<td align="right" style="color:#92400e">${fe(totCed)}</td>
+<table><thead><tr>
+  <th>ISIN</th><th>Nome</th><th>Tipo</th><th>Seniority</th><th>Settore</th>
+  <th>Scadenza</th><th>Call</th><th>Ced%</th><th>Ask</th>
+  <th>YTM%</th><th>YTC%</th><th>Peso%</th>
+  <th>Nominale €</th><th>Effettivo €</th><th>Ced.Ann €</th>
+</tr></thead>
+<tbody>${rows}</tbody>
+<tfoot class="tot"><tr>
+  <td colspan="11">TOTALE</td>
+  <td align="right">${fp(bonds.reduce((s,b)=>s+b.peso,0),2)}</td>
+  <td align="right" style="color:#15803d">${fe(totNom)}</td>
+  <td align="right" style="color:#1e40af">${fe(totEff)}</td>
+  <td align="right" style="color:#92400e">${fe(totCed)}</td>
 </tr></tfoot></table>
-<div class="sec">Flusso Cedolare Mensile (sul nominale)</div>
-<table><thead><tr><th>Periodo</th>${MONTHS.map(m=>`<th>${m}</th>`).join("")}<th>Totale</th></tr></thead>
-<tbody><tr><td style="font-weight:700">${new Date().getFullYear()+1}</td>${cedRow}
-<td align="right" style="font-weight:800;background:#fffbeb;color:#92400e">${fe(monthlyData.reduce((s,m)=>s+m.cedola,0))}</td>
+
+<!-- Flusso Cedolare -->
+<div class="sec">Flusso Cedolare Mensile <span class="sec-note">sul nominale — anno corrente</span></div>
+<table><thead><tr>
+  <th>Periodo</th>${MONTHS.map(m=>`<th>${m}</th>`).join("")}<th>Totale</th>
+</tr></thead>
+<tbody><tr>
+  <td style="font-weight:700">${new Date().getFullYear()+1}</td>${cedRow}
+  <td align="right" style="font-weight:800;background:#fffbeb;color:#92400e">${fe(monthlyData.reduce((s,m)=>s+m.cedola,0))}</td>
 </tr></tbody></table>
+
+<!-- Composizione -->
 <div class="sec">Composizione Portafoglio</div>
-<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-bottom:20px">
+<div class="comp-grid">
   ${(()=>{
     const ratingMap={"AAA":"#059669","AA+":"#10b981","AA":"#34d399","AA-":"#6ee7b7","A+":"#3b82f6","A":"#60a5fa","A-":"#93c5fd","BBB+":"#8b5cf6","BBB":"#a78bfa","BBB-":"#c4b5fd","Baa2":"#ddd6fe","BB+":"#ef4444","BB":"#f87171","ND":"#9ca3af"};
     const tipoMap={"Governativo":"#3b82f6","Corporate":"#8b5cf6","Sovranazionale":"#10b981"};
@@ -530,25 +698,25 @@ td{padding:5px 5px;border-bottom:1px solid #f3f4f6;font-size:10px}tr:nth-child(e
     const agg=(fn)=>{const r={};bonds.forEach(b=>{const k=fn(b)||"ND";r[k]=(r[k]||0)+b.peso;});return Object.entries(r).map(([k,v])=>({name:k,peso:v})).sort((a,b)=>b.peso-a.peso);};
     const RATING_ORD=["AAA","AA+","AA","AA-","A+","A","A-","BBB+","BBB","BBB-","Baa1","Baa2","Baa3","BB+","BB","BB-","ND"];
     const ratingD=agg(b=>b.rating).sort((a,b)=>RATING_ORD.indexOf(a.name)-RATING_ORD.indexOf(b.name));
-    const tipoD=agg(b=>b.tipo);
-    const seniD=agg(b=>b.seniority);
-    const sectD=agg(b=>b.sector);
-    const ccyD=agg(b=>b.valuta);
-    const cpnD=agg(b=>b.tipoCedola);
     return [
-      buildCompositionSection("Per Rating",ratingD,ratingMap),
-      buildCompositionSection("Per Tipologia",tipoD,tipoMap),
-      buildCompositionSection("Per Seniority",seniD,seniMap),
-      buildCompositionSection("Per Settore",sectD,sectMap),
-      buildCompositionSection("Per Valuta",ccyD,ccyMap),
-      buildCompositionSection("Per Tipo Cedola",cpnD,cpnMap),
+      buildCompositionSection("Per Rating",    ratingD,               ratingMap),
+      buildCompositionSection("Per Tipologia", agg(b=>b.tipo),        tipoMap),
+      buildCompositionSection("Per Seniority", agg(b=>b.seniority),   seniMap),
+      buildCompositionSection("Per Settore",   agg(b=>b.sector),      sectMap),
+      buildCompositionSection("Per Valuta",    agg(b=>b.valuta),      ccyMap),
+      buildCompositionSection("Per Tipo Cedola",agg(b=>b.tipoCedola), cpnMap),
     ].join("");
   })()}
 </div>
-<div class="foot"><span>Report generato automaticamente · Dashboard Portafoglio Obbligazionario</span><span>Solo a fini informativi.</span></div>
+
+<div class="foot">
+  <span>Report generato automaticamente · BondAnalyst Dashboard</span>
+  <span>Solo a fini informativi — dati indicativi.</span>
+</div>
 </body></html>`;
-  const w=window.open("","_blank");
-  if(w){w.document.write(html);w.document.close();}
+
+  const w = window.open("","_blank");
+  if(w){ w.document.write(html); w.document.close(); }
   else alert("Popup bloccato dal browser. Consenti i popup per questo sito.");
 }
 
