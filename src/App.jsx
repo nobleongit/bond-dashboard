@@ -184,6 +184,12 @@ const calcCurrentYield  = (b)   => b.cedola/(b.ask/100);
 const fe  = (n) => "€"+Number(n).toLocaleString("it-IT",{minimumFractionDigits:2,maximumFractionDigits:2});
 const fn  = (n) => Number(n).toLocaleString("it-IT",{maximumFractionDigits:0});
 const fp  = (n,d=3) => Number(n).toFixed(d)+"%";
+// Converte YYYY-MM-DD → DD/MM/YYYY per la visualizzazione (convenzione europea)
+const fmtDate = (s) => {
+  if(!s) return "—";
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : s;
+};
 
 // Seniority semplificata
 function normalizeSeniority(raw="") {
@@ -518,7 +524,7 @@ function openReport(bonds,totale,stats,monthlyData) {
   const rows = bonds.map(b=>`<tr>
     <td style="font-size:9px;font-family:monospace;color:#555">${b.isin}</td>
     <td>${b.name}</td><td>${b.tipo}</td><td>${b.seniority||""}</td><td>${b.sector||""}</td>
-    <td>${b.scadenza}</td><td style="color:${b.callDate?"#d97706":"#ccc"}">${b.callDate||"—"}</td>
+    <td>${fmtDate(b.scadenza)}</td><td style="color:${b.callDate?"#d97706":"#ccc"}">${fmtDate(b.callDate)}</td>
     <td align="right">${fp(b.cedola)}</td><td align="right">${Number(b.ask).toFixed(3)}</td>
     <td align="right"><b style="color:#1a5276">${fp(b.yldYtm)}</b></td>
     <td align="right" style="color:#d97706">${b.yldToCall?fp(b.yldToCall):"—"}</td>
@@ -600,7 +606,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-siz
 h1{font-size:22px;font-weight:800;color:#1a1a1a}.sub{font-size:10px;color:#9ca3af;margin-top:3px}
 .meta{font-size:10px;color:#6b7280;text-align:right;line-height:2}
 /* KPI grid — 7 colonne */
-.kpis{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:20px}
+.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px}
 .kpi{background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px}
 .kpi.y{background:#fffbeb;border-color:#fde68a}
 .kpi.g{background:#f0fdf4;border-color:#bbf7d0}
@@ -638,24 +644,13 @@ tr:nth-child(even) td{background:#fafafa}
   </div>
 </div>
 
-<!-- KPI: 7 card su una riga -->
+<!-- KPI: 5 card su una riga -->
 <div class="kpis">
   <div class="kpi y"><div class="l">YTM Ponderato</div><div class="v">${fp(stats.wtdYtm)}</div></div>
-  <div class="kpi g"><div class="l">YTM Minimo</div><div class="v">${fp(ytmMin)}</div></div>
-  <div class="kpi r"><div class="l">YTM Massimo</div><div class="v">${fp(ytmMax)}</div></div>
   <div class="kpi"><div class="l">Cedola Media</div><div class="v">${fp(stats.wtdCedola)}</div></div>
   <div class="kpi"><div class="l">Duration Media</div><div class="v">${Number(stats.wtdDuration).toFixed(2)} a</div></div>
   <div class="kpi y"><div class="l">Nominale Totale</div><div class="v">${fe(totNom)}</div></div>
   <div class="kpi y"><div class="l">Cedola Annua</div><div class="v">${fe(totCed)}</div></div>
-</div>
-
-<!-- Grafico Scadenze / Call -->
-<div class="sec">Profilo di Scadenza &amp; Call
-  <span class="sec-note">Barre affiancate: <span style="color:#3b82f6;font-weight:700">■ a scadenza</span> &nbsp; <span style="color:#d97706;font-weight:700">■ a call</span> &nbsp;— valori in % del portafoglio</span>
-</div>
-<div class="chart-box">
-  <div class="chart-title">Rimborso per data (% portafoglio)</div>
-  ${allKeys.length > 0 ? svgChart : '<p style="color:#9ca3af;font-size:11px;padding:12px 0">Nessuna scadenza disponibile.</p>'}
 </div>
 
 <!-- Dettaglio Titoli -->
@@ -684,6 +679,15 @@ tr:nth-child(even) td{background:#fafafa}
   <td style="font-weight:700">${new Date().getFullYear()+1}</td>${cedRow}
   <td align="right" style="font-weight:800;background:#fffbeb;color:#92400e">${fe(monthlyData.reduce((s,m)=>s+m.cedola,0))}</td>
 </tr></tbody></table>
+
+<!-- Grafico Scadenze / Call -->
+<div class="sec">Profilo di Scadenza &amp; Call
+  <span class="sec-note">Barre affiancate: <span style="color:#3b82f6;font-weight:700">■ a scadenza</span> &nbsp; <span style="color:#d97706;font-weight:700">■ a call</span> &nbsp;— valori in % del portafoglio</span>
+</div>
+<div class="chart-box">
+  <div class="chart-title">Rimborso per data (% portafoglio)</div>
+  ${allKeys.length > 0 ? svgChart : '<p style="color:#9ca3af;font-size:11px;padding:12px 0">Nessuna scadenza disponibile.</p>'}
+</div>
 
 <!-- Composizione -->
 <div class="sec">Composizione Portafoglio</div>
@@ -720,6 +724,69 @@ tr:nth-child(even) td{background:#fafafa}
   else alert("Popup bloccato dal browser. Consenti i popup per questo sito.");
 }
 
+// ─── IFIELD — componente esterno per evitare rimount ad ogni render ──────────
+// Mantiene stato locale (rawVal) mentre si digita; propaga al parent solo onBlur.
+// Questo risolve il problema di perdita focus/cursore nelle celle editabili.
+function IField({ v, onCommit, w=60, color="#1a1a1a", type="number", align="right", mono=false }) {
+  const [rawVal, setRawVal] = useState(String(v ?? ""));
+  const [focused, setFocused] = useState(false);
+
+  // Sync external value only when not focused (es. cambio portafoglio via CSV)
+  const prevV = useRef(v);
+  if (!focused && v !== prevV.current) {
+    prevV.current = v;
+    setRawVal(String(v ?? ""));
+  }
+
+  const handleFocus = (e) => {
+    setFocused(true);
+    e.target.style.borderBottomColor = "#f5c842";
+    e.target.style.background = "#fef9e7";
+  };
+  const handleBlur = (e) => {
+    setFocused(false);
+    e.target.style.borderBottomColor = "transparent";
+    e.target.style.background = "transparent";
+    onCommit(rawVal);                // propaga al parent solo al blur
+    prevV.current = v;               // aggiorna ref dopo commit
+  };
+  const handleChange = (e) => {
+    setRawVal(e.target.value);       // aggiorna solo stato locale → nessun re-render parent
+  };
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter") e.target.blur(); // Enter = conferma = blur
+    if (e.key === "Escape") {
+      setRawVal(String(v ?? ""));    // Escape = annulla
+      e.target.blur();
+    }
+  };
+
+  return (
+    <input
+      type={type}
+      value={rawVal}
+      step={type === "number" ? "any" : undefined}
+      onChange={handleChange}
+      onFocus={handleFocus}
+      onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
+      style={{
+        background: "transparent",
+        border: "none",
+        borderBottom: "1.5px solid transparent",
+        color,
+        fontSize: 12,
+        width: w,
+        outline: "none",
+        textAlign: align,
+        padding: "2px 0",
+        fontFamily: mono ? "monospace" : "inherit",
+        transition: "border-color 0.15s, background 0.15s",
+      }}
+    />
+  );
+}
+
 // ─── APP ──────────────────────────────────────────────────────────────────────
 const EMPTY_BOND = {
   valuta:"EUR",issuer:"",isin:"",name:"",scadenza:"",callDate:"",
@@ -740,6 +807,8 @@ export default function App() {
   const [tipoFilter,setTipoFilter]     = useState("Tutti");
   const [showMaturity,setShowMaturity] = useState(true);
   const [showCall,setShowCall]         = useState(true);
+  const [sortCol,setSortCol]           = useState(null);   // colonna attiva
+  const [sortDir,setSortDir]           = useState("asc");   // 'asc' | 'desc'
   const fileRef = useRef(null);
 
   // ── Calcoli ────────────────────────────────────────────────────────────────
@@ -803,7 +872,30 @@ export default function App() {
   const currencyData = useMemo(()=>{const r={};bonds.forEach(b=>{const s=b.valuta||"EUR";r[s]=(r[s]||0)+b.peso;});return Object.entries(r).map(([k,v])=>({name:k,peso:v}));},[bonds]);
   const couponTypeData=useMemo(()=>{const r={};bonds.forEach(b=>{const s=b.tipoCedola||"Fixed";r[s]=(r[s]||0)+b.peso;});return Object.entries(r).map(([k,v])=>({name:k,peso:v}));},[bonds]);
 
-  const filtered = useMemo(()=>tipoFilter==="Tutti"?bonds:bonds.filter(b=>b.tipo===tipoFilter),[bonds,tipoFilter]);
+  const filtered = useMemo(()=>{
+    let arr = tipoFilter==="Tutti" ? bonds : bonds.filter(b=>b.tipo===tipoFilter);
+    if(!sortCol) return arr;
+    return [...arr].sort((a,b)=>{
+      let va=a[sortCol], vb=b[sortCol];
+      // Colonne calcolate
+      if(sortCol==="cy")      { va=calcCurrentYield(a); vb=calcCurrentYield(b); }
+      if(sortCol==="nominale"){ va=calcNominale(a,totale); vb=calcNominale(b,totale); }
+      if(sortCol==="effettivo"){va=calcEffettivo(a,totale);vb=calcEffettivo(b,totale);}
+      if(sortCol==="cedAnnua"){ va=calcCouponAnnuo(a,totale);vb=calcCouponAnnuo(b,totale);}
+      // Null/undefined sempre in fondo
+      if(va==null||va==="") return 1;
+      if(vb==null||vb==="") return -1;
+      const cmp = typeof va==="number" && typeof vb==="number"
+        ? va-vb
+        : String(va).localeCompare(String(vb),"it",{sensitivity:"base"});
+      return sortDir==="asc" ? cmp : -cmp;
+    });
+  },[bonds,tipoFilter,sortCol,sortDir,totale]);
+
+  const toggleSort = (col) => {
+    if(sortCol===col) setSortDir(d=>d==="asc"?"desc":"asc");
+    else { setSortCol(col); setSortDir("asc"); }
+  };
 
   // ── Handlers ───────────────────────────────────────────────────────────────
   const updateBond=(idx,field,raw)=>{
@@ -857,13 +949,8 @@ export default function App() {
   const TTIP={contentStyle:{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,fontSize:12,boxShadow:"0 4px 16px rgba(0,0,0,0.08)"}};
   const pct = (n) => `${Number(n).toFixed(1)}%`;
 
-  const IField=({v,onChange,w=60,color=C.dark,type="number",align="right",mono=false})=>(
-    <input type={type} value={v} step={type==="number"?"any":undefined} onChange={e=>onChange(e.target.value)}
-      onFocus={e=>{e.target.style.borderBottomColor=C.yellow;e.target.style.background=C.yellowL;}}
-      onBlur={e=>{e.target.style.borderBottomColor="transparent";e.target.style.background="transparent";}}
-      style={{background:"transparent",border:"none",borderBottom:"1.5px solid transparent",color,fontSize:12,
-        width:w,outline:"none",textAlign:align,padding:"2px 0",fontFamily:mono?"monospace":"inherit",transition:"all 0.15s"}}/>
-  );
+  // IField è definito fuori da App per evitare ricreazione ad ogni render
+  // (causa perdita focus/cursore su ogni keystroke)
   const Pill=({children,bg,color,border})=>(
     <span style={{background:bg,color,border:`1px solid ${border||color+"44"}`,padding:"2px 9px",borderRadius:20,fontSize:10,fontWeight:700,display:"inline-block",whiteSpace:"nowrap"}}>{children}</span>
   );
@@ -1115,12 +1202,47 @@ export default function App() {
                 <table className="ba-table-bonds" style={{borderCollapse:"collapse",fontSize:11.5}}>
                   <thead>
                     <tr>
-                      {["CCY","Emittente","ISIN","Nome","Tipo","Seniority","Settore","Scad.","Call","Ced%","Ask","CY%","YTM%","YTC%","Dur","Freq","Rating","Peso%","Nom.€","Eff.€*","Ced.€*",""].map(h=>(
-                        <th key={h} style={{...TH,
-                          ...(h==="CY%"?{color:"#d97706"}:{}),
-                          ...(h.endsWith("*")?{fontStyle:"italic",color:"#9ca3af"}:{}),
-                        }}>{h.replace("*","")}</th>
-                      ))}
+                      {/* col: field key per sort | label: testo header | sort: true/false | w: min-width px */}
+                      {[
+                        {col:"valuta",   label:"CCY",      sort:true,  w:52},
+                        {col:"issuer",   label:"Emittente",sort:true,  w:140},
+                        {col:"isin",     label:"ISIN",     sort:true,  w:105},
+                        {col:"name",     label:"Nome",     sort:true,  w:160},
+                        {col:"tipo",     label:"Tipo",     sort:true,  w:110},
+                        {col:"seniority",label:"Seniority",sort:true,  w:120},
+                        {col:"sector",   label:"Settore",  sort:true,  w:120},
+                        {col:"scadenza", label:"Scad.",    sort:true,  w:90},
+                        {col:"callDate", label:"Call",     sort:true,  w:90},
+                        {col:"cedola",   label:"Ced%",     sort:true,  w:62},
+                        {col:"ask",      label:"Ask",      sort:true,  w:62},
+                        {col:"cy",       label:"CY%",      sort:true,  w:68},
+                        {col:"yldYtm",   label:"YTM%",     sort:true,  w:68},
+                        {col:"yldToCall",label:"YTC%",     sort:true,  w:68},
+                        {col:"duration", label:"Dur",      sort:true,  w:52},
+                        {col:null,       label:"Freq",     sort:false, w:58},
+                        {col:"rating",   label:"Rating",   sort:true,  w:58},
+                        {col:"peso",     label:"Peso%",    sort:true,  w:62},
+                        {col:"nominale", label:"Nom.€",    sort:true,  w:82},
+                        {col:"effettivo",label:"Eff.€",    sort:true,  w:82, italic:true},
+                        {col:"cedAnnua", label:"Ced.€",    sort:true,  w:78, italic:true},
+                        {col:null,       label:"",         sort:false, w:36},
+                      ].map(({col,label,sort,w,italic})=>{
+                        const active = sortCol===col;
+                        const arrow  = active ? (sortDir==="asc"?"↑":"↓") : "";
+                        return(
+                          <th key={label} onClick={sort&&col?()=>toggleSort(col):undefined}
+                            style={{...TH, minWidth:w, whiteSpace:"nowrap",
+                              cursor:sort&&col?"pointer":"default",
+                              userSelect:"none",
+                              color: italic?"#9ca3af": col==="cy"?"#d97706": active?C.yellow: C.gray,
+                              fontStyle: italic?"italic":"normal",
+                              background: active?"#2a2a2a":C.lgray,
+                              transition:"background 0.15s, color 0.15s",
+                            }}>
+                            {label}{arrow&&<span style={{marginLeft:3,fontSize:9,opacity:0.9}}>{arrow}</span>}
+                          </th>
+                        );
+                      })}
                     </tr>
                   </thead>
                   <tbody>
@@ -1136,11 +1258,11 @@ export default function App() {
                             <Pill bg={`${CURRENCY_COLORS[b.valuta]||C.blue}22`} color={CURRENCY_COLORS[b.valuta]||C.blue} border={`${CURRENCY_COLORS[b.valuta]||C.blue}55`}>{b.valuta}</Pill>
                           </td>
                           {/* Emittente */}
-                          <td style={{...TD,maxWidth:130,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:11,color:C.gray}} title={b.issuer}>{b.issuer}</td>
+                          <td style={{...TD,whiteSpace:"nowrap",fontSize:11,color:C.gray}}>{b.issuer}</td>
                           {/* ISIN */}
                           <td style={{...TD,fontFamily:"monospace",fontSize:10,color:C.gray,whiteSpace:"nowrap"}}>{b.isin}</td>
                           {/* Nome */}
-                          <td style={{...TD,maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:600}}>{b.name}</td>
+                          <td style={{...TD,whiteSpace:"nowrap",fontWeight:600}}>{b.name}</td>
                           {/* Tipo */}
                           <td style={{...TD,padding:"6px 8px"}}>
                             <select value={b.tipo} onChange={e=>updateBond(idx,"tipo",e.target.value)}
@@ -1157,24 +1279,31 @@ export default function App() {
                             </select>
                           </td>
                           {/* Settore */}
-                          <td style={{...TD,maxWidth:110,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:10,color:C.gray}} title={b.sector}>
-                            <IField type="text" v={b.sector||""} onChange={v=>updateBond(idx,"sector",v)} w={100} color={SECTOR_COLORS[b.sector]||C.gray} align="left"/>
+                          <td style={{...TD,whiteSpace:"nowrap",fontSize:10,color:C.gray}}>
+                            <IField type="text" v={b.sector||""} onCommit={v=>updateBond(idx,"sector",v)} w={100} color={SECTOR_COLORS[b.sector]||C.gray} align="left"/>
                           </td>
-                          {/* Scadenza */}
-                          <td style={{...TD,padding:"5px 6px"}}>
-                            <IField type="date" v={b.scadenza} onChange={v=>updateBond(idx,"scadenza",v)} w={110} align="left" mono/>
+                          {/* Scadenza — mostra DD/MM/YYYY, converte a ISO on commit */}
+                          <td style={{...TD,padding:"5px 6px",whiteSpace:"nowrap"}}>
+                            <IField type="text" v={fmtDate(b.scadenza)} onCommit={v=>{
+                              const m=v.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+                              updateBond(idx,"scadenza",m?`${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`:v);
+                            }} w={82} align="left" mono/>
                           </td>
-                          {/* Call */}
-                          <td style={{...TD,padding:"5px 6px"}}>
-                            <IField type="date" v={b.callDate||""} onChange={v=>updateBond(idx,"callDate",v)} w={110} color="#d97706" align="left" mono/>
+                          {/* Call — mostra DD/MM/YYYY, converte a ISO on commit */}
+                          <td style={{...TD,padding:"5px 6px",whiteSpace:"nowrap"}}>
+                            <IField type="text" v={fmtDate(b.callDate)} onCommit={v=>{
+                              if(!v||v==="—"||v.trim()===""){updateBond(idx,"callDate","");return;}
+                              const m=v.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+                              updateBond(idx,"callDate",m?`${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`:v);
+                            }} w={82} color="#d97706" align="left" mono/>
                           </td>
                           {/* Cedola */}
                           <td style={{...TD,padding:"5px 6px",whiteSpace:"nowrap"}}>
-                            <IField v={b.cedola} onChange={v=>updateBond(idx,"cedola",v)} w={44}/><span style={{color:C.gray,fontSize:10}}>%</span>
+                            <IField v={b.cedola} onCommit={v=>updateBond(idx,"cedola",v)} w={44}/><span style={{color:C.gray,fontSize:10}}>%</span>
                           </td>
                           {/* Ask */}
                           <td style={{...TD,padding:"5px 6px"}}>
-                            <IField v={b.ask} onChange={v=>updateBond(idx,"ask",v)} w={54} color={b.ask>100?C.red:b.ask<100?C.green:C.dark}/>
+                            <IField v={b.ask} onCommit={v=>updateBond(idx,"ask",v)} w={54} color={b.ask>100?C.red:b.ask<100?C.green:C.dark}/>
                           </td>
                           {/* CY% */}
                           <td style={{...TD,textAlign:"right",whiteSpace:"nowrap"}}>
@@ -1183,7 +1312,7 @@ export default function App() {
                           </td>
                           {/* YTM */}
                           <td style={{...TD,padding:"5px 6px",whiteSpace:"nowrap"}}>
-                            <IField v={b.yldYtm} onChange={v=>updateBond(idx,"yldYtm",v)} w={48} color={C.green}/><span style={{color:C.gray,fontSize:10}}>%</span>
+                            <IField v={b.yldYtm} onCommit={v=>updateBond(idx,"yldYtm",v)} w={48} color={C.green}/><span style={{color:C.gray,fontSize:10}}>%</span>
                           </td>
                           {/* YTC */}
                           <td style={{...TD,textAlign:"right",fontSize:11,color:b.yldToCall?"#d97706":C.border}}>
@@ -1191,7 +1320,7 @@ export default function App() {
                           </td>
                           {/* Duration */}
                           <td style={{...TD,padding:"5px 6px"}}>
-                            <IField v={b.duration||""} onChange={v=>updateBond(idx,"duration",v)} w={40}/>
+                            <IField v={b.duration||""} onCommit={v=>updateBond(idx,"duration",v)} w={40}/>
                           </td>
                           {/* Freq */}
                           <td style={{...TD,padding:"5px 6px",textAlign:"center",fontSize:11,color:C.gray}}>
@@ -1203,15 +1332,15 @@ export default function App() {
                           </td>
                           {/* Rating */}
                           <td style={{...TD,padding:"5px 6px"}}>
-                            <IField type="text" v={b.rating} onChange={v=>updateBond(idx,"rating",v)} w={44} color={RATING_COLORS[b.rating]||C.blue} align="center"/>
+                            <IField type="text" v={b.rating} onCommit={v=>updateBond(idx,"rating",v)} w={44} color={RATING_COLORS[b.rating]||C.blue} align="center"/>
                           </td>
                           {/* Peso */}
                           <td style={{...TD,padding:"5px 6px",whiteSpace:"nowrap"}}>
-                            <IField v={parseFloat(b.peso.toFixed(4))} onChange={v=>updateBond(idx,"peso",v)} w={52}/><span style={{color:C.gray,fontSize:10}}>%</span>
+                            <IField v={parseFloat(b.peso.toFixed(4))} onCommit={v=>updateBond(idx,"peso",v)} w={52}/><span style={{color:C.gray,fontSize:10}}>%</span>
                           </td>
                           {/* Nominale */}
                           <td style={{...TD,padding:"5px 6px"}}>
-                            <IField v={parseFloat(calcNominale(b,totale).toFixed(2))} onChange={v=>updateBond(idx,"nominale",v)} w={78} color={C.green}/>
+                            <IField v={parseFloat(calcNominale(b,totale).toFixed(2))} onCommit={v=>updateBond(idx,"nominale",v)} w={78} color={C.green}/>
                           </td>
                           {/* Effettivo */}
                           <td style={{...TD,textAlign:"right",fontFamily:"monospace",fontStyle:"italic",color:C.blue,fontSize:11,fontWeight:600}}>{fe(calcEffettivo(b,totale))}</td>
@@ -1376,8 +1505,8 @@ export default function App() {
                               {(b.seniority||"Senior").replace("Unsecured","").replace("Secured","Sec.").trim()}
                             </Pill>
                           </td>
-                          <td style={{...TD,fontFamily:"monospace",fontSize:11,fontWeight:600}}>{b.scadenza}</td>
-                          <td style={{...TD,fontFamily:"monospace",fontSize:11,color:b.callDate?"#d97706":C.gray,fontWeight:b.callDate?700:400}}>{b.callDate||"—"}</td>
+                          <td style={{...TD,fontFamily:"monospace",fontSize:11,fontWeight:600}}>{fmtDate(b.scadenza)}</td>
+                          <td style={{...TD,fontFamily:"monospace",fontSize:11,color:b.callDate?"#d97706":C.gray,fontWeight:b.callDate?700:400}}>{fmtDate(b.callDate)}</td>
                           <td style={{...TD,padding:"7px 11px"}}><Pill bg={`${RATING_COLORS[b.rating]||C.blue}22`} color={RATING_COLORS[b.rating]||C.blue} border={`${RATING_COLORS[b.rating]||C.blue}44`}>{b.rating}</Pill></td>
                           <td style={{...TD,textAlign:"right",fontWeight:600}}>{b.peso.toFixed(4)}%</td>
                           <td style={{...TD,textAlign:"right",color:C.green,fontFamily:"monospace",fontWeight:600}}>{fe(calcNominale(b,totale))}</td>
