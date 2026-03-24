@@ -523,7 +523,7 @@ function openReport(bonds,totale,stats,monthlyData) {
   // ── Tabella dettaglio titoli ──────────────────────────────────────────────
   const rows = bonds.map(b=>`<tr>
     <td style="font-size:9px;font-family:monospace;color:#555">${b.isin}</td>
-    <td>${b.name}</td><td>${b.tipo}</td><td>${b.seniority||""}</td><td>${b.sector||""}</td>
+    <td>${b.issuer||b.name}</td><td>${b.tipo}</td><td>${b.seniority||""}</td><td>${b.sector||""}</td>
     <td>${fmtDate(b.scadenza)}</td><td style="color:${b.callDate?"#d97706":"#ccc"}">${fmtDate(b.callDate)}</td>
     <td align="right">${fp(b.cedola)}</td><td align="right">${Number(b.ask).toFixed(3)}</td>
     <td align="right"><b style="color:#1a5276">${fp(b.yldYtm)}</b></td>
@@ -600,12 +600,32 @@ function openReport(bonds,totale,stats,monthlyData) {
 <title>Report Portafoglio · ${today}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:11px;background:#fff;color:#111;padding:36px}
-@media print{body{padding:14px}button{display:none!important}.page-break{page-break-before:always}}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:11px;background:#fff;color:#111;padding:32px 36px}
+
+/* ── Print rules ─────────────────────────────────────────────────────── */
+@media print{
+  body{padding:10px 14px;font-size:10px}
+  button{display:none!important}
+  /* evita che le sezioni chiave vengano spezzate tra pagine */
+  .no-break{break-inside:avoid;page-break-inside:avoid}
+  /* forza nuova pagina prima delle sezioni principali (eccetto la prima) */
+  .page-section{break-before:auto;page-break-before:auto}
+  .page-section+.page-section{break-before:page;page-break-before:page}
+  /* tabelle: header si ripete su ogni pagina, righe non si spezzano */
+  thead{display:table-header-group}
+  tr{break-inside:avoid;page-break-inside:avoid}
+  /* grafici e card composizione non si spezzano */
+  .chart-box{break-inside:avoid;page-break-inside:avoid}
+  .comp-grid{break-inside:avoid;page-break-inside:avoid}
+  .kpis{break-inside:avoid;page-break-inside:avoid}
+  .hdr{break-inside:avoid;page-break-inside:avoid}
+  /* cedole: la tabella è larga — forza landscape se supportato */
+  @page{size:A4 landscape;margin:12mm 10mm}
+}
+
 .hdr{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #f5c842;padding-bottom:14px;margin-bottom:20px}
 h1{font-size:22px;font-weight:800;color:#1a1a1a}.sub{font-size:10px;color:#9ca3af;margin-top:3px}
 .meta{font-size:10px;color:#6b7280;text-align:right;line-height:2}
-/* KPI grid — 7 colonne */
 .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px}
 .kpi{background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px}
 .kpi.y{background:#fffbeb;border-color:#fde68a}
@@ -615,17 +635,31 @@ h1{font-size:22px;font-weight:800;color:#1a1a1a}.sub{font-size:10px;color:#9ca3a
 .kpi .v{font-size:15px;font-weight:800;color:#1a1a1a}
 .kpi.y .v{color:#92400e}.kpi.g .v{color:#15803d}.kpi.r .v{color:#dc2626}
 .sec{font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.1em;
-  border-bottom:2px solid #f3f4f6;padding-bottom:5px;margin:18px 0 10px;display:flex;align-items:center;gap:8px}
+  border-bottom:2px solid #f3f4f6;padding-bottom:5px;margin:18px 0 10px;display:flex;align-items:center;gap:8px;
+  break-inside:avoid;page-break-inside:avoid}
 .sec-note{font-size:9px;font-weight:400;color:#9ca3af;text-transform:none;letter-spacing:0}
+/* Tabelle generali */
 table{width:100%;border-collapse:collapse;margin-bottom:16px}
 th{background:#1a1a1a;color:#fff;padding:5px 5px;font-size:7.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap}
 td{padding:4px 5px;border-bottom:1px solid #f3f4f6;font-size:9.5px}
 tr:nth-child(even) td{background:#fafafa}
 .tot td{font-weight:800;background:#fffbeb;border-top:2px solid #f5c842}
-.chart-box{border:1px solid #e5e7eb;border-radius:8px;padding:14px 16px;margin-bottom:16px;background:#fafafa}
+/* Tabella flusso cedolare per bond — compatta, scroll orizzontale su schermo */
+.ced-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:16px}
+.ced-table{border-collapse:collapse;font-size:9px;min-width:900px;width:100%}
+.ced-table th{background:#1a1a1a;color:#fff;padding:5px 6px;font-size:7.5px;font-weight:700;text-transform:uppercase;white-space:nowrap;text-align:right}
+.ced-table th:first-child,.ced-table th:nth-child(2){text-align:left}
+.ced-table td{padding:5px 6px;border-bottom:1px solid #f3f4f6;text-align:right;font-family:monospace;white-space:nowrap}
+.ced-table td:first-child{text-align:left;font-family:monospace;font-size:8.5px;color:#6b7280}
+.ced-table td:nth-child(2){text-align:left;font-size:8.5px;color:#374151}
+.ced-table td.pay{background:#fffbeb;color:#92400e;font-weight:700}
+.ced-table td.empty{color:#d1d5db}
+.ced-table .tot-row td{font-weight:800;background:#fffbeb;border-top:2px solid #f5c842;color:#92400e}
+.ced-table .tot-row td:first-child,.ced-table .tot-row td:nth-child(2){background:#fffbeb}
+.chart-box{border:1px solid #e5e7eb;border-radius:8px;padding:14px 16px;margin-bottom:16px;background:#fafafa;break-inside:avoid;page-break-inside:avoid}
 .chart-title{font-size:8px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px}
-.comp-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px}
-.foot{margin-top:20px;border-top:1px solid #e5e7eb;padding-top:8px;font-size:9px;color:#9ca3af;display:flex;justify-content:space-between}
+.comp-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px;break-inside:avoid;page-break-inside:avoid}
+.foot{margin-top:20px;border-top:1px solid #e5e7eb;padding-top:8px;font-size:9px;color:#9ca3af;display:flex;justify-content:space-between;break-inside:avoid;page-break-inside:avoid}
 .pbtn{display:inline-block;margin-bottom:16px;background:#f5c842;color:#1a1a1a;border:none;border-radius:8px;
   padding:8px 18px;font-size:12px;font-weight:700;cursor:pointer}
 </style></head><body>
@@ -645,7 +679,7 @@ tr:nth-child(even) td{background:#fafafa}
 </div>
 
 <!-- KPI: 5 card su una riga -->
-<div class="kpis">
+<div class="kpis no-break">
   <div class="kpi y"><div class="l">YTM Ponderato</div><div class="v">${fp(stats.wtdYtm)}</div></div>
   <div class="kpi"><div class="l">Cedola Media</div><div class="v">${fp(stats.wtdCedola)}</div></div>
   <div class="kpi"><div class="l">Duration Media</div><div class="v">${Number(stats.wtdDuration).toFixed(2)} a</div></div>
@@ -654,9 +688,10 @@ tr:nth-child(even) td{background:#fafafa}
 </div>
 
 <!-- Dettaglio Titoli -->
+<div class="page-section">
 <div class="sec">Dettaglio Titoli</div>
 <table><thead><tr>
-  <th>ISIN</th><th>Nome</th><th>Tipo</th><th>Seniority</th><th>Settore</th>
+  <th>ISIN</th><th>Emittente</th><th>Tipo</th><th>Seniority</th><th>Settore</th>
   <th>Scadenza</th><th>Call</th><th>Ced%</th><th>Ask</th>
   <th>YTM%</th><th>YTC%</th><th>Peso%</th>
   <th>Nominale €</th><th>Effettivo €</th><th>Ced.Ann €</th>
@@ -669,18 +704,65 @@ tr:nth-child(even) td{background:#fafafa}
   <td align="right" style="color:#1e40af">${fe(totEff)}</td>
   <td align="right" style="color:#92400e">${fe(totCed)}</td>
 </tr></tfoot></table>
+</div><!-- /page-section Titoli -->
 
 <!-- Flusso Cedolare -->
-<div class="sec">Flusso Cedolare Mensile <span class="sec-note">sul nominale — anno corrente</span></div>
-<table><thead><tr>
-  <th>Periodo</th>${MONTHS.map(m=>`<th>${m}</th>`).join("")}<th>Totale</th>
+<div class="page-section">
+<div class="sec">Flusso Cedolare Mensile <span class="sec-note">sul nominale — per titolo</span></div>
+<div class="ced-wrap">
+<table class="ced-table">
+<thead><tr>
+  <th>ISIN</th><th>Emittente</th><th>Freq</th>
+  ${MONTHS_FULL.map(m=>`<th>${m.substring(0,3).toUpperCase()}</th>`).join("")}
+  <th style="background:#333;color:#f5c842">TOT. ANNUO</th>
 </tr></thead>
-<tbody><tr>
-  <td style="font-weight:700">${new Date().getFullYear()+1}</td>${cedRow}
-  <td align="right" style="font-weight:800;background:#fffbeb;color:#92400e">${fe(monthlyData.reduce((s,m)=>s+m.cedola,0))}</td>
-</tr></tbody></table>
+<tbody>
+${(()=>{
+  const FREQ_LBL={0:"ZC",1:"Annuale",2:"Semestrale",4:"Trimestrale",12:"Mensile"};
+  return bonds.map(b=>{
+    const mesi = getCouponMonths(b);
+    const singolo = mesi.length ? calcCouponAnnuo(b,totale)/mesi.length : 0;
+    const totAnnuo = calcCouponAnnuo(b,totale);
+    const cells = MONTHS_FULL.map((_,mi)=>{
+      const hasPay = mesi.includes(mi+1);
+      const val = hasPay ? singolo : 0;
+      return hasPay
+        ? `<td class="pay">€${val.toFixed(2)}</td>`
+        : `<td class="empty">—</td>`;
+    }).join("");
+    const issuerShort = (b.issuer||b.name).length>28 ? (b.issuer||b.name).substring(0,26)+"…" : (b.issuer||b.name);
+    return `<tr>
+      <td style="font-family:monospace;font-size:8px;color:#6b7280">${b.isin}</td>
+      <td style="font-size:8.5px">${issuerShort}</td>
+      <td style="text-align:center;font-size:8px;color:#6b7280">${FREQ_LBL[b.couponFreq||1]||"Ann."}</td>
+      ${cells}
+      <td style="font-weight:800;color:#92400e;background:#fffbeb">€${totAnnuo.toFixed(2)}</td>
+    </tr>`;
+  }).join("");
+})()}
+</tbody>
+<tfoot>
+<tr class="tot-row">
+  <td colspan="3">TOTALE</td>
+  ${MONTHS_FULL.map((_,mi)=>{
+    const tot = bonds.reduce((s,b)=>{
+      const mesi=getCouponMonths(b);
+      if(!mesi.includes(mi+1)) return s;
+      return s+(mesi.length?calcCouponAnnuo(b,totale)/mesi.length:0);
+    },0);
+    return tot>0
+      ? `<td>€${tot.toFixed(2)}</td>`
+      : `<td style="color:#d1d5db">—</td>`;
+  }).join("")}
+  <td>€${bonds.reduce((s,b)=>s+calcCouponAnnuo(b,totale),0).toFixed(2)}</td>
+</tr>
+</tfoot>
+</table>
+</div>
+</div><!-- /page-section Cedolare -->
 
 <!-- Grafico Scadenze / Call -->
+<div class="page-section">
 <div class="sec">Profilo di Scadenza &amp; Call
   <span class="sec-note">Barre affiancate: <span style="color:#3b82f6;font-weight:700">■ a scadenza</span> &nbsp; <span style="color:#d97706;font-weight:700">■ a call</span> &nbsp;— valori in % del portafoglio</span>
 </div>
@@ -688,6 +770,7 @@ tr:nth-child(even) td{background:#fafafa}
   <div class="chart-title">Rimborso per data (% portafoglio)</div>
   ${allKeys.length > 0 ? svgChart : '<p style="color:#9ca3af;font-size:11px;padding:12px 0">Nessuna scadenza disponibile.</p>'}
 </div>
+</div><!-- /page-section Scadenze -->
 
 <!-- Composizione -->
 <div class="sec">Composizione Portafoglio</div>
