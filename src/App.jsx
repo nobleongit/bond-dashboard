@@ -487,6 +487,98 @@ function downloadCSVTemplate() {
   }
 }
 
+// ─── REPORT CONFIG — personalizza qui logo, font e disclaimer ────────────────
+//
+// PRODUZIONE: per aggiornare logo o font senza toccare il codice,
+// metti i file in /public/ del progetto Vercel e aggiorna i path qui sotto.
+//
+// LOGO
+//   • In sviluppo: embedded come base64 (zero dipendenze esterne)
+//   • In produzione: sostituisci LOGO_SRC con il path pubblico, es:
+//       const LOGO_SRC = "/assets/logo.png";
+//   • Formato consigliato: PNG con sfondo trasparente, versione bianca
+//     (il logo appare su header scuro #1a1a1a)
+//
+// FONT
+//   • In sviluppo: usa font di sistema (san-serif stack)
+//   • In produzione: carica da /public/fonts/ con @font-face, es:
+//       const CUSTOM_FONT_URL = "/fonts/Inter.woff2";
+//   • Oppure usa Google Fonts CDN (richiede connessione internet al momento della stampa)
+//
+// DISCLAIMER
+//   • Modifica il testo in DISCLAIMER_TEXT — supporta HTML
+//   • La pagina disclaimer viene aggiunta automaticamente in fondo al report
+//
+const REPORT_CONFIG = {
+  // ── Branding ──────────────────────────────────────────────────────────
+  firmName:    "Banca Patrimoni",
+  reportTitle: "Analisi Portafoglio Obbligazionario",
+
+  // Logo: base64 embedded (sostituire con path /public/... in produzione)
+  // Per aggiornare: convertire il PNG in base64 con:
+  //   node -e "console.log(require('fs').readFileSync('logo.png').toString('base64'))"
+  // e incollare qui sotto tra le virgolette
+  logoBase64: "iVBORw0KGgoAAAANSUhEUgAAB9AAAAG3CAYAAADsGc6hAAABCGlDQ1BJQ0MgUHJvZmlsZQAAeJxjYGA8wQAELAYMDLl5JUVB7k4KEZFRCuwPGBiBEAwSk4sLGHADoKpv1yBqL+viUYcLcKakFicD6Q9ArFIEtBxopAiQLZIOYWuA2EkQtg2IXV5SUAJkB4DYRSFBzkB2CpCtkY7ETkJiJxcUgdT3ANk2uTmlyQh3M/Ck5oUGA2kOIJZhKGYIYnBncAL5H6IkfxEDg8VXBgbmCQixpJkMDNtbGRgkbiHEVBYwMPC3MDBsO48QQ4RJQWJRIliIBYiZ0tIYGD4tZ2DgjWRgEL7AwMAVDQsIHG5TALvNnSEfCNMZchhSgSKeDHkMyQx6QJYRgwGDIYMZAKbWPz9HbOBQAAARQ0lEQVR4nO3ZQQ0AIBDAsIF/z4cMSGgV7L81MxMAAAAAAAAAfG7fDgAAAAAAAACAFxjoAAAAAAAAAJCBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAACVgQ4AAAAAAAAAlYEOAAAAAAAAAJWBDgAAAAAAAABVHWarB2riI2a+AAAAAElFTkSuQmCC",
+  logoPublicPath: "/assets/LOGO_positivo.png",  // file in /public/assets/
+
+  // ── Font personalizzato ───────────────────────────────────────────────
+  // In sviluppo: lascia fontFaceCSS vuoto per usare il font di sistema
+  // In produzione: incolla qui il @font-face CSS, es:
+  // fontFaceCSS: `@font-face { font-family:'MyFont'; src:url('/fonts/MyFont.woff2') format('woff2'); }`
+  fontFaceCSS:   "@font-face{font-family:'SellaStencil';src:url('/assets/FONT SELLA WOFF/Sella Stencil/SellaStencil-RegularWEB.woff2') format('woff2');font-weight:400;font-style:normal;font-display:swap;}",
+  fontFamily:    "'SellaStencil',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+
+  // ── Disclaimer ────────────────────────────────────────────────────────
+  // disc.txt: testo plain in /public/assets/disc.txt
+  // Paragrafi separati da riga vuota → convertiti in <p> automaticamente
+  // Se il file non esiste viene usato disclaimerText sotto come fallback
+  disclaimerTitle: "Note Legali e Disclaimer",
+  disclaimerText: `
+    <p>Il presente documento è stato redatto da <b>Banca Patrimoni</b> a puro scopo informativo
+    e non costituisce offerta, sollecitazione o raccomandazione di investimento ai sensi
+    del D.Lgs. 58/1998 (TUF) e della Direttiva MiFID II (2014/65/UE).</p>
+
+    <p>Le informazioni contenute nel report si basano su dati di mercato indicativi alla data
+    di generazione del documento. I prezzi, i rendimenti e le valutazioni riportati sono
+    forniti a titolo indicativo e potrebbero non riflettere le condizioni effettive di mercato
+    al momento dell'esecuzione di eventuali operazioni.</p>
+
+    <p>I rendimenti passati non sono indicativi di quelli futuri. Il valore degli strumenti
+    finanziari e il reddito da essi derivante possono aumentare così come diminuire, con
+    la possibilità che l'investitore non recuperi l'intero capitale investito.</p>
+
+    <p>Le obbligazioni sono soggette a rischio di credito (default dell'emittente), rischio
+    di tasso di interesse, rischio di liquidità e, per gli strumenti denominati in valuta
+    estera, rischio di cambio. I titoli con rating inferiore a investment grade comportano
+    un rischio di credito significativamente più elevato.</p>
+
+    <p>Il presente documento non tiene conto della situazione finanziaria, degli obiettivi
+    di investimento, della propensione al rischio o dell'orizzonte temporale specifici del
+    singolo investitore. Prima di effettuare qualsiasi decisione di investimento si raccomanda
+    di consultare il proprio consulente finanziario.</p>
+
+    <p>Banca Patrimoni non si assume alcuna responsabilità per eventuali perdite o danni
+    derivanti dall'utilizzo delle informazioni contenute nel presente documento.
+    Questo report è destinato esclusivamente al destinatario indicato e non può essere
+    riprodotto, distribuito o trasmesso a terzi senza il preventivo consenso scritto di
+    Banca Patrimoni.</p>
+
+    <p style="margin-top:16px;font-size:9px;color:#9ca3af">
+    Banca Patrimoni S.p.A. — Soggetta a vigilanza di Banca d'Italia e CONSOB.
+    Iscritta all'Albo delle Banche n. XXXX. Capitale sociale € XXXXXXX i.v.
+    Sede legale: Via XXXX, XX — XXXXX Milano (MI).
+    </p>
+  `,
+};
+
+// Helper per ottenere la src del logo (path pubblico o base64)
+function getLogoSrc() {
+  if (REPORT_CONFIG.logoPublicPath) return REPORT_CONFIG.logoPublicPath;
+  if (REPORT_CONFIG.logoBase64)
+    return `data:image/png;base64,${REPORT_CONFIG.logoBase64}`;
+  return "";
+}
+
 // ─── HELPERS REPORT ──────────────────────────────────────────────────────────
 // Genera una sezione di composizione HTML con barre CSS colorate
 function buildCompositionSection(title, data, colorMap) {
@@ -512,13 +604,32 @@ function buildCompositionSection(title, data, colorMap) {
 }
 
 // ─── REPORT ───────────────────────────────────────────────────────────────────
-function openReport(bonds,totale,stats,monthlyData) {
-  const today  = new Date().toLocaleDateString("it-IT");
-  const totNom = bonds.reduce((s,b)=>s+calcNominale(b,totale),0);
-  const totEff = bonds.reduce((s,b)=>s+calcEffettivo(b,totale),0);
-  const totCed = bonds.reduce((s,b)=>s+calcCouponAnnuo(b,totale),0);
-  const ytmMin = bonds.length ? Math.min(...bonds.map(b=>b.yldYtm)) : 0;
-  const ytmMax = bonds.length ? Math.max(...bonds.map(b=>b.yldYtm)) : 0;
+async function openReport(bonds,totale,stats,monthlyData) {
+  const today    = new Date().toLocaleDateString("it-IT");
+  // Carica disclaimer da /public/assets/disc.txt (nel repo Vercel)
+  // Fallback automatico al testo in REPORT_CONFIG.disclaimerText
+  let disclaimerHTML = REPORT_CONFIG.disclaimerText;
+  try {
+    const resp = await fetch("/assets/disc.txt");
+    if (resp.ok) {
+      const raw = await resp.text();
+      // Testo plain → HTML: paragrafi separati da riga vuota
+      disclaimerHTML = raw
+        .split(/\n{2,}/)
+        .map(p => p.trim()).filter(Boolean)
+        .map(p => `<p style="margin-bottom:10px">${p.replace(/\n/g,"<br/>")}</p>`)
+        .join("");
+    }
+  } catch(e) { console.warn("disc.txt non trovato, uso disclaimer di default"); }
+
+  const totNom   = bonds.reduce((s,b)=>s+calcNominale(b,totale),0);
+  const totEff   = bonds.reduce((s,b)=>s+calcEffettivo(b,totale),0);
+  const totCed   = bonds.reduce((s,b)=>s+calcCouponAnnuo(b,totale),0);
+  const ytmMin   = bonds.length ? Math.min(...bonds.map(b=>b.yldYtm)) : 0;
+  const ytmMax   = bonds.length ? Math.max(...bonds.map(b=>b.yldYtm)) : 0;
+  const logoSrc  = getLogoSrc();
+  const fontFace = REPORT_CONFIG.fontFaceCSS || "";
+  const fontFam  = REPORT_CONFIG.fontFamily  || "-apple-system,sans-serif";
 
   // ── Tabella dettaglio titoli ──────────────────────────────────────────────
   const rows = bonds.map(b=>`<tr>
@@ -600,7 +711,8 @@ function openReport(bonds,totale,stats,monthlyData) {
 <title>Report Portafoglio · ${today}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:11px;background:#fff;color:#111;padding:32px 36px}
+${fontFace}
+body{font-family:${fontFam};font-size:11px;background:#fff;color:#111;padding:32px 36px}
 
 /* ── Print rules ─────────────────────────────────────────────────────── */
 @media print{
@@ -667,14 +779,19 @@ tr:nth-child(even) td{background:#fafafa}
 
 <div class="hdr">
   <div>
-    <div style="font-size:9px;color:#9ca3af;letter-spacing:.15em;text-transform:uppercase;margin-bottom:4px">ANALISI PORTAFOGLIO</div>
-    <h1>Portafoglio Obbligazionario</h1>
+    <div style="font-size:9px;color:#9ca3af;letter-spacing:.15em;text-transform:uppercase;margin-bottom:4px">${REPORT_CONFIG.firmName.toUpperCase()} · ANALISI PORTAFOGLIO</div>
+    <h1>${REPORT_CONFIG.reportTitle}</h1>
     <div class="sub">Generato il ${today} &nbsp;·&nbsp; ${bonds.length} titoli &nbsp;·&nbsp; ${bonds.filter(b=>b.callDate).length} con opzione call</div>
   </div>
-  <div class="meta">
-    <div>Importo effettivo: <b>${fe(totEff)}</b></div>
-    <div>Importo nominale: <b style="color:#15803d">${fe(totNom)}</b></div>
-    <div>Disaggio/Premio: <b style="color:${totNom-totEff>=0?"#15803d":"#dc2626"}">${totNom-totEff>=0?"+":""}${fe(totNom-totEff)}</b></div>
+  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:10px">
+    ${logoSrc ? `<div style="background:#1a1a1a;border-radius:8px;padding:8px 16px;display:inline-flex;align-items:center">
+      <img src="${logoSrc}" alt="${REPORT_CONFIG.firmName}" style="height:28px;width:auto;display:block"/>
+    </div>` : ""}
+    <div class="meta">
+      <div>Importo effettivo: <b>${fe(totEff)}</b></div>
+      <div>Importo nominale: <b style="color:#15803d">${fe(totNom)}</b></div>
+      <div>Disaggio/Premio: <b style="color:${totNom-totEff>=0?"#15803d":"#dc2626"}">${totNom-totEff>=0?"+":""}${fe(totNom-totEff)}</b></div>
+    </div>
   </div>
 </div>
 
@@ -797,9 +914,30 @@ ${(()=>{
 </div>
 
 <div class="foot">
-  <span>Report generato automaticamente · BondAnalyst Dashboard</span>
+  <span>${REPORT_CONFIG.firmName} · Report generato automaticamente</span>
   <span>Solo a fini informativi — dati indicativi.</span>
 </div>
+
+<!-- DISCLAIMER PAGE — pagina dedicata, sempre ultima -->
+<div style="break-before:page;page-break-before:always;padding-top:40px">
+  <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #f5c842;padding-bottom:14px;margin-bottom:28px">
+    <div>
+      <div style="font-size:9px;color:#9ca3af;letter-spacing:.15em;text-transform:uppercase;margin-bottom:4px">${REPORT_CONFIG.firmName.toUpperCase()}</div>
+      <h2 style="font-size:18px;font-weight:800;color:#1a1a1a">${REPORT_CONFIG.disclaimerTitle}</h2>
+    </div>
+    ${logoSrc ? `<div style="background:#1a1a1a;border-radius:8px;padding:8px 16px">
+      <img src="${logoSrc}" alt="${REPORT_CONFIG.firmName}" style="height:24px;width:auto;display:block"/>
+    </div>` : ""}
+  </div>
+  <div style="font-size:10.5px;line-height:1.75;color:#374151;max-width:720px">
+    ${disclaimerHTML}
+  </div>
+  <div style="margin-top:40px;padding-top:12px;border-top:1px solid #e5e7eb;font-size:8.5px;color:#9ca3af;display:flex;justify-content:space-between">
+    <span>Documento riservato · generato il ${today}</span>
+    <span>${REPORT_CONFIG.firmName}</span>
+  </div>
+</div>
+
 </body></html>`;
 
   const w = window.open("","_blank");
