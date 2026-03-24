@@ -772,6 +772,8 @@ tr:nth-child(even) td{background:#fafafa}
 .chart-title{font-size:8px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px}
 .comp-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px;break-inside:avoid;page-break-inside:avoid}
 .foot{margin-top:20px;border-top:1px solid #e5e7eb;padding-top:8px;font-size:9px;color:#9ca3af;display:flex;justify-content:space-between;break-inside:avoid;page-break-inside:avoid}
+/* Disclaimer paragraph spacing */
+.disc-body p{margin-bottom:8px;orphans:3;widows:3}
 .pbtn{display:inline-block;margin-bottom:16px;background:#f5c842;color:#1a1a1a;border:none;border-radius:8px;
   padding:8px 18px;font-size:12px;font-weight:700;cursor:pointer}
 </style></head><body>
@@ -919,8 +921,10 @@ ${(()=>{
 </div>
 
 <!-- DISCLAIMER PAGE — pagina dedicata, sempre ultima -->
-<div style="break-before:page;page-break-before:always;padding-top:40px">
-  <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #f5c842;padding-bottom:14px;margin-bottom:28px">
+<div style="break-before:page;page-break-before:always;padding-top:32px;min-height:100vh;display:flex;flex-direction:column">
+
+  <!-- Header disclaimer -->
+  <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #f5c842;padding-bottom:14px;margin-bottom:24px">
     <div>
       <div style="font-size:9px;color:#9ca3af;letter-spacing:.15em;text-transform:uppercase;margin-bottom:4px">${REPORT_CONFIG.firmName.toUpperCase()}</div>
       <h2 style="font-size:18px;font-weight:800;color:#1a1a1a">${REPORT_CONFIG.disclaimerTitle}</h2>
@@ -929,10 +933,14 @@ ${(()=>{
       <img src="${logoSrc}" alt="${REPORT_CONFIG.firmName}" style="height:24px;width:auto;display:block"/>
     </div>` : ""}
   </div>
-  <div style="font-size:10.5px;line-height:1.75;color:#374151;max-width:720px">
+
+  <!-- Testo disclaimer — occupa tutta la larghezza della pagina -->
+  <div style="flex:1;font-size:10px;line-height:1.8;color:#374151;text-align:justify;width:100%;columns:2;column-gap:32px;column-rule:1px solid #e5e7eb" class="disc-body">
     ${disclaimerHTML}
   </div>
-  <div style="margin-top:40px;padding-top:12px;border-top:1px solid #e5e7eb;font-size:8.5px;color:#9ca3af;display:flex;justify-content:space-between">
+
+  <!-- Footer disclaimer -->
+  <div style="margin-top:32px;padding-top:10px;border-top:1px solid #e5e7eb;font-size:8px;color:#9ca3af;display:flex;justify-content:space-between;align-items:center">
     <span>Documento riservato · generato il ${today}</span>
     <span>${REPORT_CONFIG.firmName}</span>
   </div>
