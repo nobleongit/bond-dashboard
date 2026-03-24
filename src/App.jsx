@@ -935,7 +935,7 @@ ${(()=>{
   </div>
 
   <!-- Testo disclaimer — occupa tutta la larghezza della pagina -->
-  <div style="flex:1;font-size:10px;line-height:1.8;color:#374151;text-align:justify;width:100%;columns:2;column-gap:32px;column-rule:1px solid #e5e7eb" class="disc-body">
+  <div style="flex:1;font-size:10px;line-height:1.8;color:#374151;text-align:justify;width:100%" class="disc-body">
     ${disclaimerHTML}
   </div>
 
