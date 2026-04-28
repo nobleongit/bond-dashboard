@@ -137,21 +137,21 @@ const ratingRank = (r) => { const i = RATING_ORDER.indexOf(r); return i === -1 ?
 
 // ─── DATI INIZIALI (aggiornati dal file Excel reale) ──────────────────────────
 const INITIAL_BONDS = [
-  { valuta:"EUR", issuer:"ROMANIA (GOVERNMENT)",                        isin:"XS2109812508", name:"ROGV 2.000 01/28/32 MTN",     scadenza:"2032-01-28", callDate:"",           cedola:2.0,   ask:88.668,  yldYtm:4.323556, yldToCall:null,     duration:5.3701, taglioMin:1000, rating:"BBB-", peso:10,   tipo:"Governativo",    seniority:"Senior Unsecured", tipoCedola:"Fixed",    couponFreq:1, sector:"Government Activity",  ammEmesso:1400000000  },
-  { valuta:"EUR", issuer:"GREECE, REPUBLIC OF (GOVERNMENT)",            isin:"GR0133010232", name:"GRGV 4.300 02/24/32",           scadenza:"2032-02-24", callDate:"",           cedola:4.3,   ask:103.776, yldYtm:3.626913, yldToCall:null,     duration:5.2209, taglioMin:1,    rating:"BBB",  peso:10,   tipo:"Governativo",    seniority:"Senior Unsecured", tipoCedola:"Variable", couponFreq:1, sector:"Government Activity",  ammEmesso:126192685   },
-  { valuta:"EUR", issuer:"ITALY, REPUBLIC OF (GOVERNMENT)",             isin:"IT0005094088", name:"ITGV 1.650 03/01/32",           scadenza:"2032-03-01", callDate:"",           cedola:1.65,  ask:94.046,  yldYtm:2.769985, yldToCall:null,     duration:5.5702, taglioMin:1000, rating:"BBB+", peso:10,   tipo:"Governativo",    seniority:"Senior Unsecured", tipoCedola:"Fixed",    couponFreq:2, sector:"Government Activity",  ammEmesso:27451727000 },
-  { valuta:"EUR", issuer:"EUROPEAN BANK FOR RECONSTRUCTION AND DEV.",   isin:"XS3030091329", name:"EBRD 2.875 03/22/32 MTN",       scadenza:"2032-03-22", callDate:"",           cedola:2.875, ask:100.982, yldYtm:2.73473,  yldToCall:null,     duration:5.3514, taglioMin:1000, rating:"AAA",  peso:10,   tipo:"Sovranazionale", seniority:"Senior Unsecured", tipoCedola:"Fixed",    couponFreq:1, sector:"Government Activity",  ammEmesso:1025000000  },
-  { valuta:"EUR", issuer:"HUNGARY (GOVERNMENT)",                        isin:"XS2161992511", name:"HUGV 1.625 04/28/32",           scadenza:"2032-04-28", callDate:"",           cedola:1.625, ask:89.276,  yldYtm:3.618185, yldToCall:null,     duration:5.5989, taglioMin:1000, rating:"BBB-", peso:10,   tipo:"Governativo",    seniority:"Senior Unsecured", tipoCedola:"Fixed",    couponFreq:1, sector:"Government Activity",  ammEmesso:1000000000  },
-  { valuta:"EUR", issuer:"POLAND, REPUBLIC OF (GOVERNMENT)",            isin:"XS2447602793", name:"PLGV 2.750 05/25/32 MTN",       scadenza:"2032-05-25", callDate:"",           cedola:2.75,  ask:99.05,   yldYtm:2.956581, yldToCall:null,     duration:5.525,  taglioMin:1000, rating:"A-",   peso:5,    tipo:"Governativo",    seniority:"Senior Unsecured", tipoCedola:"Fixed",    couponFreq:1, sector:"Government Activity",  ammEmesso:2000000000  },
-  { valuta:"EUR", issuer:"ITALY, REPUBLIC OF (GOVERNMENT)",             isin:"IT0005672024", name:"ITGV 2.600 10/28/32",           scadenza:"2032-10-28", callDate:"",           cedola:2.6,   ask:101.121, yldYtm:3.038123, yldToCall:null,     duration:5.9047, taglioMin:1000, rating:"BBB+", peso:5,    tipo:"Governativo",    seniority:"Senior Unsecured", tipoCedola:"Variable", couponFreq:4, sector:"Government Activity",  ammEmesso:16572074000 },
-  { valuta:"EUR", issuer:"ITALY, REPUBLIC OF (GOVERNMENT)",             isin:"IT0005668220", name:"ITGV 3.250 11/15/32",           scadenza:"2032-11-15", callDate:"",           cedola:3.25,  ask:102.265, yldYtm:2.896075, yldToCall:null,     duration:null,   taglioMin:1000, rating:"BBB+", peso:5,    tipo:"Governativo",    seniority:"Senior Unsecured", tipoCedola:"Fixed",    couponFreq:2, sector:"Government Activity",  ammEmesso:18700000000 },
-  { valuta:"EUR", issuer:"FRANCE, REPUBLIC OF (GOVERNMENT)",            isin:"FR001400BKZ3", name:"FRGV 2.000 11/25/32",           scadenza:"2032-11-25", callDate:"",           cedola:2.0,   ask:94.937,  yldYtm:2.841852, yldToCall:null,     duration:6.148,  taglioMin:1,    rating:"A+",   peso:5,    tipo:"Governativo",    seniority:"Senior Unsecured", tipoCedola:"Fixed",    couponFreq:1, sector:"Government Activity",  ammEmesso:59439000000 },
-  { valuta:"EUR", issuer:"RWE AG",                                      isin:"XS2743711298", name:"RWEG 3.625 01/10/32 MTN",       scadenza:"2032-01-10", callDate:"2031-10-10", cedola:3.625, ask:103.663, yldYtm:2.967237, yldToCall:2.942511, duration:5.0103, taglioMin:1000, rating:"Baa2", peso:5,    tipo:"Corporate",      seniority:"Senior Unsecured", tipoCedola:"Fixed",    couponFreq:1, sector:"Utilities",             ammEmesso:500000000   },
-  { valuta:"EUR", issuer:"BMW FINANCE NV",                              isin:"XS3280519078", name:"BMWG 3.250 01/27/32 MTN",       scadenza:"2032-01-27", callDate:"",           cedola:3.25,  ask:100.736, yldYtm:3.135625, yldToCall:null,     duration:5.2898, taglioMin:1000, rating:"ND",   peso:5,    tipo:"Corporate",      seniority:"Senior Unsecured", tipoCedola:"Fixed",    couponFreq:1, sector:"Consumer Cyclicals",    ammEmesso:650000000   },
-  { valuta:"EUR", issuer:"FRESENIUS FINANCE IRELAND PLC",               isin:"XS1554373834", name:"FREG 3.000 01/30/32 MTN",       scadenza:"2032-01-30", callDate:"2031-10-30", cedola:3.0,   ask:100.066, yldYtm:3.058468, yldToCall:3.06226,  duration:5.3311, taglioMin:1000, rating:"ND",   peso:5,    tipo:"Corporate",      seniority:"Senior Unsecured", tipoCedola:"Fixed",    couponFreq:1, sector:"Healthcare",            ammEmesso:500000000   },
-  { valuta:"EUR", issuer:"E.ON SE",                                     isin:"XS2791959906", name:"EONG 3.500 03/25/32 MTN",       scadenza:"2032-03-25", callDate:"2031-12-25", cedola:3.5,   ask:102.535, yldYtm:3.068601, yldToCall:3.053273, duration:5.0553, taglioMin:1000, rating:"BBB+", peso:5,    tipo:"Corporate",      seniority:"Senior Unsecured", tipoCedola:"Fixed",    couponFreq:1, sector:"Utilities",             ammEmesso:800000000   },
-  { valuta:"EUR", issuer:"HEIDELBERG MATERIALS AG",                     isin:"XS2577874782", name:"HEIG 3.750 05/31/32 MTN",       scadenza:"2032-05-31", callDate:"2032-02-29", cedola:3.75,  ask:103.799, yldYtm:3.112654, yldToCall:3.091131, duration:5.187,  taglioMin:1000, rating:"BBB",  peso:5,    tipo:"Corporate",      seniority:"Senior Unsecured", tipoCedola:"Fixed",    couponFreq:1, sector:"Basic Materials",        ammEmesso:750000000   },
-  { valuta:"EUR", issuer:"DEUTSCHE LUFTHANSA AG",                       isin:"XS2892988192", name:"LHAG 4.125 09/03/32 MTN",       scadenza:"2032-09-03", callDate:"2032-06-03", cedola:4.125, ask:105.504, yldYtm:3.210796, yldToCall:3.180804, duration:5.3817, taglioMin:1000, rating:"BBB-", peso:5,    tipo:"Corporate",      seniority:"Senior Unsecured", tipoCedola:"Fixed",    couponFreq:1, sector:"Industrials",           ammEmesso:500000000   },
+  { valuta:"EUR", issuer:"ROMANIA (GOVERNMENT)",                        isin:"XS2109812508", name:"ROGV 2.000 01/28/32 MTN",     scadenza:"2032-01-28", callDate:"",           cedola:2.0,   ask:88.668,  yldYtm:4.323556, yldToCall:null,     duration:5.3701, taglioMin:1000, rating:"BBB-", peso:10,   tipo:"Governativo",    seniority:"Senior Unsecured", tipoCedola:"Fixed",    couponFreq:1, sector:"Government Activity",  ammEmesso:1400000000, rateo:0 },
+  { valuta:"EUR", issuer:"GREECE, REPUBLIC OF (GOVERNMENT)",            isin:"GR0133010232", name:"GRGV 4.300 02/24/32",           scadenza:"2032-02-24", callDate:"",           cedola:4.3,   ask:103.776, yldYtm:3.626913, yldToCall:null,     duration:5.2209, taglioMin:1,    rating:"BBB",  peso:10,   tipo:"Governativo",    seniority:"Senior Unsecured", tipoCedola:"Variable", couponFreq:1, sector:"Government Activity",  ammEmesso:126192685, rateo:0 },
+  { valuta:"EUR", issuer:"ITALY, REPUBLIC OF (GOVERNMENT)",             isin:"IT0005094088", name:"ITGV 1.650 03/01/32",           scadenza:"2032-03-01", callDate:"",           cedola:1.65,  ask:94.046,  yldYtm:2.769985, yldToCall:null,     duration:5.5702, taglioMin:1000, rating:"BBB+", peso:10,   tipo:"Governativo",    seniority:"Senior Unsecured", tipoCedola:"Fixed",    couponFreq:2, sector:"Government Activity",  ammEmesso:27451727000, rateo:0 },
+  { valuta:"EUR", issuer:"EUROPEAN BANK FOR RECONSTRUCTION AND DEV.",   isin:"XS3030091329", name:"EBRD 2.875 03/22/32 MTN",       scadenza:"2032-03-22", callDate:"",           cedola:2.875, ask:100.982, yldYtm:2.73473,  yldToCall:null,     duration:5.3514, taglioMin:1000, rating:"AAA",  peso:10,   tipo:"Sovranazionale", seniority:"Senior Unsecured", tipoCedola:"Fixed",    couponFreq:1, sector:"Government Activity",  ammEmesso:1025000000, rateo:0 },
+  { valuta:"EUR", issuer:"HUNGARY (GOVERNMENT)",                        isin:"XS2161992511", name:"HUGV 1.625 04/28/32",           scadenza:"2032-04-28", callDate:"",           cedola:1.625, ask:89.276,  yldYtm:3.618185, yldToCall:null,     duration:5.5989, taglioMin:1000, rating:"BBB-", peso:10,   tipo:"Governativo",    seniority:"Senior Unsecured", tipoCedola:"Fixed",    couponFreq:1, sector:"Government Activity",  ammEmesso:1000000000, rateo:0 },
+  { valuta:"EUR", issuer:"POLAND, REPUBLIC OF (GOVERNMENT)",            isin:"XS2447602793", name:"PLGV 2.750 05/25/32 MTN",       scadenza:"2032-05-25", callDate:"",           cedola:2.75,  ask:99.05,   yldYtm:2.956581, yldToCall:null,     duration:5.525,  taglioMin:1000, rating:"A-",   peso:5,    tipo:"Governativo",    seniority:"Senior Unsecured", tipoCedola:"Fixed",    couponFreq:1, sector:"Government Activity",  ammEmesso:2000000000, rateo:0 },
+  { valuta:"EUR", issuer:"ITALY, REPUBLIC OF (GOVERNMENT)",             isin:"IT0005672024", name:"ITGV 2.600 10/28/32",           scadenza:"2032-10-28", callDate:"",           cedola:2.6,   ask:101.121, yldYtm:3.038123, yldToCall:null,     duration:5.9047, taglioMin:1000, rating:"BBB+", peso:5,    tipo:"Governativo",    seniority:"Senior Unsecured", tipoCedola:"Variable", couponFreq:4, sector:"Government Activity",  ammEmesso:16572074000, rateo:0 },
+  { valuta:"EUR", issuer:"ITALY, REPUBLIC OF (GOVERNMENT)",             isin:"IT0005668220", name:"ITGV 3.250 11/15/32",           scadenza:"2032-11-15", callDate:"",           cedola:3.25,  ask:102.265, yldYtm:2.896075, yldToCall:null,     duration:null,   taglioMin:1000, rating:"BBB+", peso:5,    tipo:"Governativo",    seniority:"Senior Unsecured", tipoCedola:"Fixed",    couponFreq:2, sector:"Government Activity",  ammEmesso:18700000000, rateo:0 },
+  { valuta:"EUR", issuer:"FRANCE, REPUBLIC OF (GOVERNMENT)",            isin:"FR001400BKZ3", name:"FRGV 2.000 11/25/32",           scadenza:"2032-11-25", callDate:"",           cedola:2.0,   ask:94.937,  yldYtm:2.841852, yldToCall:null,     duration:6.148,  taglioMin:1,    rating:"A+",   peso:5,    tipo:"Governativo",    seniority:"Senior Unsecured", tipoCedola:"Fixed",    couponFreq:1, sector:"Government Activity",  ammEmesso:59439000000, rateo:0 },
+  { valuta:"EUR", issuer:"RWE AG",                                      isin:"XS2743711298", name:"RWEG 3.625 01/10/32 MTN",       scadenza:"2032-01-10", callDate:"2031-10-10", cedola:3.625, ask:103.663, yldYtm:2.967237, yldToCall:2.942511, duration:5.0103, taglioMin:1000, rating:"Baa2", peso:5,    tipo:"Corporate",      seniority:"Senior Unsecured", tipoCedola:"Fixed",    couponFreq:1, sector:"Utilities",             ammEmesso:500000000, rateo:0 },
+  { valuta:"EUR", issuer:"BMW FINANCE NV",                              isin:"XS3280519078", name:"BMWG 3.250 01/27/32 MTN",       scadenza:"2032-01-27", callDate:"",           cedola:3.25,  ask:100.736, yldYtm:3.135625, yldToCall:null,     duration:5.2898, taglioMin:1000, rating:"ND",   peso:5,    tipo:"Corporate",      seniority:"Senior Unsecured", tipoCedola:"Fixed",    couponFreq:1, sector:"Consumer Cyclicals",    ammEmesso:650000000, rateo:0 },
+  { valuta:"EUR", issuer:"FRESENIUS FINANCE IRELAND PLC",               isin:"XS1554373834", name:"FREG 3.000 01/30/32 MTN",       scadenza:"2032-01-30", callDate:"2031-10-30", cedola:3.0,   ask:100.066, yldYtm:3.058468, yldToCall:3.06226,  duration:5.3311, taglioMin:1000, rating:"ND",   peso:5,    tipo:"Corporate",      seniority:"Senior Unsecured", tipoCedola:"Fixed",    couponFreq:1, sector:"Healthcare",            ammEmesso:500000000, rateo:0 },
+  { valuta:"EUR", issuer:"E.ON SE",                                     isin:"XS2791959906", name:"EONG 3.500 03/25/32 MTN",       scadenza:"2032-03-25", callDate:"2031-12-25", cedola:3.5,   ask:102.535, yldYtm:3.068601, yldToCall:3.053273, duration:5.0553, taglioMin:1000, rating:"BBB+", peso:5,    tipo:"Corporate",      seniority:"Senior Unsecured", tipoCedola:"Fixed",    couponFreq:1, sector:"Utilities",             ammEmesso:800000000, rateo:0 },
+  { valuta:"EUR", issuer:"HEIDELBERG MATERIALS AG",                     isin:"XS2577874782", name:"HEIG 3.750 05/31/32 MTN",       scadenza:"2032-05-31", callDate:"2032-02-29", cedola:3.75,  ask:103.799, yldYtm:3.112654, yldToCall:3.091131, duration:5.187,  taglioMin:1000, rating:"BBB",  peso:5,    tipo:"Corporate",      seniority:"Senior Unsecured", tipoCedola:"Fixed",    couponFreq:1, sector:"Basic Materials",        ammEmesso:750000000, rateo:0 },
+  { valuta:"EUR", issuer:"DEUTSCHE LUFTHANSA AG",                       isin:"XS2892988192", name:"LHAG 4.125 09/03/32 MTN",       scadenza:"2032-09-03", callDate:"2032-06-03", cedola:4.125, ask:105.504, yldYtm:3.210796, yldToCall:3.180804, duration:5.3817, taglioMin:1000, rating:"BBB-", peso:5,    tipo:"Corporate",      seniority:"Senior Unsecured", tipoCedola:"Fixed",    couponFreq:1, sector:"Industrials",           ammEmesso:500000000, rateo:0 },
 ];
 
 const MONTHS      = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
@@ -175,10 +175,17 @@ function getCouponMonths(bond) {
   return [...new Set(months)].sort((a, b) => a - b);
 }
 
-const calcEffettivo     = (b,t) => (b.peso/100)*t;
-const calcNominale      = (b,t) => calcEffettivo(b,t)/(b.ask/100);
+// Dirty price = Ask (clean) + Rateo cedola maturato
+// Il rateo viene letto dal CSV (colonna "Accrued"), default 0 se assente
+const calcDirtyPrice    = (b)   => (b.ask||0) + (b.rateo||0);
+// Esborso = importo allocato (peso% × totale investito)
+const calcEsborso       = (b,t) => (b.peso/100)*t;
+const calcEffettivo     = calcEsborso;                              // alias interno
+// Nominale = esborso / (dirty price / 100) — usa prezzo sporco per il calcolo corretto
+const calcNominale      = (b,t) => calcEsborso(b,t)/(calcDirtyPrice(b)/100);
 const calcCouponAnnuo   = (b,t) => calcNominale(b,t)*(b.cedola/100);
 const calcCouponSingolo = (b,t) => { const m=getCouponMonths(b); return m.length?calcCouponAnnuo(b,t)/m.length:0; };
+// Current Yield sempre su clean price (Ask), convenzione di mercato
 const calcCurrentYield  = (b)   => b.cedola/(b.ask/100);
 
 const fe  = (n) => "€"+Number(n).toLocaleString("it-IT",{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -277,6 +284,7 @@ function parseCSV(text) {
     couponFreq:ix("coupon fred","couponfreq","coupon freq","frequenza","freq","coupon frequency"),
     sector:    ix("economic sector","economic_sector","sector","settore","industry"),
     ammEmesso: ix("ammontare emesso","ammemesso","amm emesso","issued amount","ammontare_emesso","issue size"),
+    rateo:     ix("accrued","rateo","accrued interest","rateo cedola","accrued_interest"),
   };
 
   // 6. Helper: pulisce stringa raw di una cella
@@ -408,6 +416,7 @@ function parseCSV(text) {
       couponFreq: parseNum(g(row, "couponFreq"), 1) || 1,
       sector:     g(row, "sector")  || "—",
       ammEmesso:  parseNum(g(row, "ammEmesso")),
+      rateo:      c.rateo >= 0 ? parseNum(g(row, "rateo"), 0) : 0,
     });
   }
 
@@ -418,10 +427,10 @@ function parseCSV(text) {
 function downloadCSVTemplate() {
   // 18 colonne — formato esatto del file di caricamento ufficiale
   // Separatore: ; | Date: GG/MM/AAAA | Decimali: virgola | Peso: con % | NULL per valori assenti
-  const HDR = "Valuta;Issuer Name;ISIN;Security Name;Scadenza;Call Date;Cedola;Ask;Yld Ytm Ask;Yld to Call;Duration;Taglio Minimo;Rating;Peso;Tipo Cedola;Seniority;Coupon Fred;Economic Sector";
-  const EX1 = "EUR;EXAMPLE CORP SPA;XS1234567890;EXCORP 3.500 15/01/30;15/01/2030;15/10/2029;3,50;101,50;3,20;3,10;4,80;1000;BBB+;10,00%;Fixed:Plain Vanilla Fixed Coupon;Senior Unsecured;1;Utilities";
-  const EX2 = "EUR;EXAMPLE ISSUER GOV;IT0000000001;ITGV 2.000 01/03/31;01/03/2031;NULL;2,00;98,50;2,35;NULL;5,20;1000;BBB+;15,00%;Fixed:Plain Vanilla Fixed Coupon;Senior Unsecured;2;Government Activity";
-  const EX3 = "EUR;EXAMPLE BANK AT1;XS9999999999;EXBK 5.000 01/06/32;01/06/2032;01/03/2032;5,00;99,00;5,15;5,10;4,20;200000;BB+;5,00%;Fixed:Plain Vanilla Fixed Coupon;AT1;1;Financials";
+  const HDR = "Valuta;Issuer Name;ISIN;Security Name;Scadenza;Call Date;Cedola;Ask;Yld Ytm Ask;Yld to Call;Duration;Taglio Minimo;Rating;Peso;Tipo Cedola;Seniority;Coupon Fred;Economic Sector;Accrued";
+  const EX1 = "EUR;EXAMPLE CORP SPA;XS1234567890;EXCORP 3.500 15/01/30;15/01/2030;15/10/2029;3,50;101,50;3,20;3,10;4,80;1000;BBB+;10,00%;Fixed:Plain Vanilla Fixed Coupon;Senior Unsecured;1;Utilities;0,35";
+  const EX2 = "EUR;EXAMPLE ISSUER GOV;IT0000000001;ITGV 2.000 01/03/31;01/03/2031;NULL;2,00;98,50;2,35;NULL;5,20;1000;BBB+;15,00%;Fixed:Plain Vanilla Fixed Coupon;Senior Unsecured;2;Government Activity;0,45";
+  const EX3 = "EUR;EXAMPLE BANK AT1;XS9999999999;EXBK 5.000 01/06/32;01/06/2032;01/03/2032;5,00;99,00;5,15;5,10;4,20;200000;BB+;5,00%;Fixed:Plain Vanilla Fixed Coupon;AT1;1;Financials;1,20";
   const rows = [HDR, EX1, EX2, EX3].join("\r\n");
 
   const legend = [
@@ -443,6 +452,7 @@ function downloadCSVTemplate() {
     ["Seniority",     "Senior Unsecured | Senior Secured | Tier 2 | AT1 | Junior Subordinated"],
     ["Coupon Fred",   "Frequenza annua: 1=annuale 2=semestrale 4=trimestrale 12=mensile"],
     ["Economic Sector","Government Activity | Utilities | Financials | Healthcare | …"],
+    ["Accrued",       "Rateo cedola maturato in % — es. 0,35. Da Bloomberg: campo AI. Default: 0"],
   ].map(([col,desc]) =>
     `<tr><td style="padding:4px 10px;font-weight:700;white-space:nowrap;font-family:monospace;font-size:11px">${col}</td>` +
     `<td style="padding:4px 10px;font-size:11px;color:#374151">${desc}</td></tr>`
@@ -790,7 +800,7 @@ tr:nth-child(even) td{background:#fafafa}
       <img src="${logoSrc}" alt="${REPORT_CONFIG.firmName}" style="height:28px;width:auto;display:block"/>
     </div>` : ""}
     <div class="meta">
-      <div>Importo effettivo: <b>${fe(totEff)}</b></div>
+      <div>Esborso effettivo: <b>${fe(totEff)}</b></div>
       <div>Importo nominale: <b style="color:#15803d">${fe(totNom)}</b></div>
       <div>Disaggio/Premio: <b style="color:${totNom-totEff>=0?"#15803d":"#dc2626"}">${totNom-totEff>=0?"+":""}${fe(totNom-totEff)}</b></div>
     </div>
@@ -813,7 +823,7 @@ tr:nth-child(even) td{background:#fafafa}
   <th>ISIN</th><th>Emittente</th><th>Tipo</th><th>Seniority</th><th>Settore</th>
   <th>Scadenza</th><th>Call</th><th>Ced%</th><th>Ask</th>
   <th>YTM%</th><th>YTC%</th><th>Peso%</th>
-  <th>Nominale €</th><th>Effettivo €</th><th>Ced.Ann €</th>
+  <th>Nominale €</th><th>Esborso €</th><th>Ced.Ann €</th>
 </tr></thead>
 <tbody>${rows}</tbody>
 <tfoot class="tot"><tr>
@@ -1021,7 +1031,7 @@ const EMPTY_BOND = {
   valuta:"EUR",issuer:"",isin:"",name:"",scadenza:"",callDate:"",
   cedola:0,ask:100,yldYtm:0,yldToCall:"",duration:0,taglioMin:1000,
   rating:"BBB",peso:5,tipo:"Governativo",seniority:"Senior Unsecured",
-  tipoCedola:"Fixed",couponFreq:1,sector:"",ammEmesso:0,
+  tipoCedola:"Fixed",couponFreq:1,sector:"",ammEmesso:0,rateo:0,
 };
 
 export default function App() {
@@ -1108,6 +1118,7 @@ export default function App() {
       let va=a[sortCol], vb=b[sortCol];
       // Colonne calcolate
       if(sortCol==="cy")      { va=calcCurrentYield(a); vb=calcCurrentYield(b); }
+      if(sortCol==="rateo")   { va=a.rateo||0; vb=b.rateo||0; }
       if(sortCol==="nominale"){ va=calcNominale(a,totale); vb=calcNominale(b,totale); }
       if(sortCol==="effettivo"){va=calcEffettivo(a,totale);vb=calcEffettivo(b,totale);}
       if(sortCol==="cedAnnua"){ va=calcCouponAnnuo(a,totale);vb=calcCouponAnnuo(b,totale);}
@@ -1130,7 +1141,7 @@ export default function App() {
   const updateBond=(idx,field,raw)=>{
     const u=[...bonds];
     if(field==="nominale"){const n=parseFloat(raw)||0;u[idx]={...u[idx],peso:(n*(u[idx].ask/100))/totale*100};}
-    else if(["cedola","ask","yldYtm","yldToCall","duration","taglioMin","peso","couponFreq","ammEmesso"].includes(field)) u[idx]={...u[idx],[field]:parseFloat(raw)||0};
+    else if(["cedola","ask","rateo","yldYtm","yldToCall","duration","taglioMin","peso","couponFreq","ammEmesso"].includes(field)) u[idx]={...u[idx],[field]:parseFloat(raw)||0};
     else u[idx]={...u[idx],[field]:raw};
     setBonds(u);
   };
@@ -1288,7 +1299,7 @@ export default function App() {
               </div>
               <div className="ba-totale-card" style={{...card,padding:"16px 22px",display:"flex",alignItems:"center",gap:16}}>
                 <div style={{flex:1}}>
-                  <p style={{fontSize:10,color:C.gray,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:4}}>Importo Effettivo</p>
+                  <p style={{fontSize:10,color:C.gray,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:4}}>Esborso Effettivo</p>
                   <div style={{display:"flex",alignItems:"baseline",gap:4}}>
                     <span style={{color:C.gray,fontWeight:600}}>€</span>
                     <input
@@ -1315,7 +1326,7 @@ export default function App() {
             {/* KPI importi */}
             <div className="ba-grid-3" style={{marginBottom:14}}>
               {[
-                {icon:"💰",l:"Importo Effettivo",  v:fe(stats.totEffettivo),   s:"Totale pagato al mercato",          vc:C.dark, bg:C.card},
+                {icon:"💰",l:"Esborso Effettivo",  v:fe(stats.totEffettivo),   s:"Esborso al mercato (dirty)",          vc:C.dark, bg:C.card},
                 {icon:"📋",l:"Importo Nominale",    v:fe(stats.totNominale),    s:"Valore facciale dei titoli",        vc:C.green,bg:C.greenL},
                 {icon:stats.disaggio>=0?"📈":"📉",
                  l:stats.disaggio>=0?"Disaggio (sotto pari)":"Premio (sopra pari)",
@@ -1407,7 +1418,7 @@ export default function App() {
                 ))}
               </div>
               <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                <span style={{fontSize:12,color:C.gray}}>Nom: <b style={{color:C.green}}>{fe(stats.totNominale)}</b> · Eff: <b style={{color:C.blue}}>{fe(stats.totEffettivo)}</b></span>
+                <span style={{fontSize:12,color:C.gray}}>Nom: <b style={{color:C.green}}>{fe(stats.totNominale)}</b> · Esb: <b style={{color:C.blue}}>{fe(stats.totEffettivo)}</b></span>
                 <Btn primary sm onClick={()=>setShowAddForm(v=>!v)}>+ Aggiungi</Btn>
               </div>
             </div>
@@ -1423,7 +1434,7 @@ export default function App() {
             <div style={{...card,background:C.yellowL,border:`1px solid ${C.yellowB}`,padding:"9px 16px",marginBottom:10,fontSize:11,color:"#92400e",display:"flex",gap:20,flexWrap:"wrap"}}>
               <span>✏️ Clicca su un campo per modificarlo.</span>
               <span><b>CY%</b> = Cedola%/(Ask/100) — rendimento cedolare effettivo.</span>
-              <span style={{fontStyle:"italic",color:C.gray}}>Effettivo € e Ced.Ann.€ sono formule.</span>
+              <span style={{fontStyle:"italic",color:C.gray}}>Esborso € e Ced.Ann.€ sono formule.</span>
             </div>
 
             <div style={{...card,padding:0,overflow:"hidden"}}>
@@ -1452,7 +1463,7 @@ export default function App() {
                         {col:"rating",   label:"Rating",   sort:true,  w:58},
                         {col:"peso",     label:"Peso%",    sort:true,  w:62},
                         {col:"nominale", label:"Nom.€",    sort:true,  w:82},
-                        {col:"effettivo",label:"Eff.€",    sort:true,  w:82, italic:true},
+                        {col:"effettivo",label:"Esb.€",    sort:true,  w:82, italic:true},
                         {col:"cedAnnua", label:"Ced.€",    sort:true,  w:78, italic:true},
                         {col:null,       label:"",         sort:false, w:36},
                       ].map(({col,label,sort,w,italic})=>{
@@ -1534,6 +1545,14 @@ export default function App() {
                           <td style={{...TD,padding:"5px 6px"}}>
                             <IField v={b.ask} onCommit={v=>updateBond(idx,"ask",v)} w={54} color={b.ask>100?C.red:b.ask<100?C.green:C.dark}/>
                           </td>
+                          {/* Rateo cedola (Accrued %) */}
+                          <td style={{...TD,padding:"5px 6px"}}>
+                            <IField v={b.rateo||0} onCommit={v=>updateBond(idx,"rateo",v)} w={46} color="#7c3aed"/>
+                          </td>
+                          {/* Dirty Price = Ask + Rateo */}
+                          <td style={{...TD,textAlign:"right",fontFamily:"monospace",fontSize:11,color:"#7c3aed",fontWeight:600,fontStyle:"italic",whiteSpace:"nowrap"}}>
+                            {calcDirtyPrice(b).toFixed(3)}
+                          </td>
                           {/* CY% */}
                           <td style={{...TD,textAlign:"right",whiteSpace:"nowrap"}}>
                             <b style={{color:cyd<-0.01?C.red:cyd>0.01?C.green:C.dark,fontSize:11}}>{cy.toFixed(3)}%</b>
@@ -1571,7 +1590,7 @@ export default function App() {
                           <td style={{...TD,padding:"5px 6px"}}>
                             <IField v={parseFloat(calcNominale(b,totale).toFixed(2))} onCommit={v=>updateBond(idx,"nominale",v)} w={78} color={C.green}/>
                           </td>
-                          {/* Effettivo */}
+                          {/* Esborso */}
                           <td style={{...TD,textAlign:"right",fontFamily:"monospace",fontStyle:"italic",color:C.blue,fontSize:11,fontWeight:600}}>{fe(calcEffettivo(b,totale))}</td>
                           {/* Cedola annua */}
                           <td style={{...TD,textAlign:"right",fontFamily:"monospace",fontStyle:"italic",color:"#d97706",fontSize:11}}>{fe(calcCouponAnnuo(b,totale))}</td>
@@ -1716,7 +1735,7 @@ export default function App() {
               <div className="ba-table-wrap">
                 <table style={{minWidth:900,width:"100%",borderCollapse:"collapse",fontSize:12}}>
                   <thead>
-                    <tr>{["ISIN","Emittente","Tipo","Seniority","Scadenza","Call","Rating","Peso%","Nom.€","Eff.€","CY%","YTM%","YTC%"].map(h=>(
+                    <tr>{["ISIN","Emittente","Tipo","Seniority","Scadenza","Call","Rating","Peso%","Nom.€","Esb.€","CY%","YTM%","YTC%"].map(h=>(
                       <th key={h} style={{...TH,...(h==="CY%"?{color:"#d97706"}:{})}}>{h}</th>
                     ))}</tr>
                   </thead>
@@ -1798,7 +1817,7 @@ export default function App() {
                   ["Cedola Media",    fp(stats.wtdCedola),             C.dark],
                   ["Duration Pond.",  `${stats.wtdDuration.toFixed(2)} anni`, C.dark],
                   ["Nominale Totale", fe(stats.totNominale),           C.green],
-                  ["Effettivo Totale",fe(stats.totEffettivo),          C.blue],
+                  ["Esborso Totale",fe(stats.totEffettivo),          C.blue],
                   ["Disaggio/Premio", (stats.disaggio>=0?"+":"")+fe(stats.disaggio), stats.disaggio>=0?C.green:C.red],
                   ["Cedola Annua",    fe(stats.totCoupon),             "#d97706"],
                   ["N° Titoli",       String(bonds.length),            C.dark],
@@ -1853,6 +1872,7 @@ function AddForm({form,setForm}) {
       <F k="taglioMin"  l="Taglio Min." t="number"/>
       <F k="peso"       l="Peso %"      t="number"/>
       <F k="ammEmesso"  l="Amm. Emesso" t="number"/>
+      <F k="rateo"      l="Rateo (Accrued %)" t="number"/>
     </div>
   );
 }
