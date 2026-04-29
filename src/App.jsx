@@ -1442,7 +1442,7 @@ export default function App() {
                 <table className="ba-table-bonds" style={{borderCollapse:"collapse",fontSize:11.5}}>
                   <thead>
                     <tr>
-                      {/* col: field key per sort | label: testo header | sort: true/false | w: min-width px */}
+                      {/* col: field key per sort | label | sort | w: min-width px */}
                       {[
                         {col:"valuta",   label:"CCY",      sort:true,  w:52},
                         {col:"issuer",   label:"Emittente",sort:true,  w:140},
@@ -1455,6 +1455,8 @@ export default function App() {
                         {col:"callDate", label:"Call",     sort:true,  w:90},
                         {col:"cedola",   label:"Ced%",     sort:true,  w:62},
                         {col:"ask",      label:"Ask",      sort:true,  w:62},
+                        {col:"rateo",    label:"Rateo",    sort:true,  w:62},
+                        {col:null,       label:"Dirty",    sort:false, w:70},
                         {col:"cy",       label:"CY%",      sort:true,  w:68},
                         {col:"yldYtm",   label:"YTM%",     sort:true,  w:68},
                         {col:"yldToCall",label:"YTC%",     sort:true,  w:68},
