@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from "react";
+import * as XLSX from "xlsx";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from "recharts";
 
 // ─── GLOBAL RESPONSIVE CSS ────────────────────────────────────────────────────
@@ -589,6 +590,122 @@ function getLogoSrc() {
   return "";
 }
 
+// ─── EXPORT EXCEL ────────────────────────────────────────────────────────────
+//
+// 4 fogli:
+//   1. Riepilogo    — KPI aggregati del portafoglio
+//   2. Titoli       — dettaglio per bond con tutti i campi
+//   3. Flusso Ced.  — matrice mesi × bond (come tab Cedole)
+//   4. Flussi Anno  — cash flow pluriennali (cedole + rimborsi)
+//
+function exportExcel(bonds, totale, stats, monthlyData) {
+  const wb   = XLSX.utils.book_new();
+  const today = new Date().toLocaleDateString("it-IT");
+
+  const num2 = (n)=>Math.round(n*100)/100;
+  const num4 = (n)=>Math.round(n*10000)/10000;
+
+  // ── Foglio 1: Riepilogo ────────────────────────────────────────────────────
+  const totNom = bonds.reduce((s,b)=>s+calcNominale(b,totale),0);
+  const totEff = bonds.reduce((s,b)=>s+calcEsborso(b,totale),0);
+  const totCed = bonds.reduce((s,b)=>s+calcCouponAnnuo(b,totale),0);
+  const riepilogo = [
+    ["RIEPILOGO PORTAFOGLIO", ""],
+    ["Data generazione", today],
+    [""],
+    ["Metrica",              "Valore"],
+    ["N° Titoli",            bonds.length],
+    ["Esborso Effettivo (€)",num2(totEff)],
+    ["Importo Nominale (€)", num2(totNom)],
+    ["Disaggio/Premio (€)",  num2(totNom-totEff)],
+    ["YTM Ponderato (%)",    num4(stats.wtdYtm)],
+    ["Cedola Media (%)",     num4(stats.wtdCedola)],
+    ["Duration Ponderata",   num2(stats.wtdDuration)],
+    ["Rating Medio",         stats.wtdRating],
+    ["Cedola Annua (€)",     num2(totCed)],
+    ["Titoli con Call",      bonds.filter(b=>b.callDate).length],
+  ];
+  const ws1 = XLSX.utils.aoa_to_sheet(riepilogo);
+  ws1["!cols"] = [{wch:28},{wch:18}];
+  XLSX.utils.book_append_sheet(wb, ws1, "Riepilogo");
+
+  // ── Foglio 2: Titoli ───────────────────────────────────────────────────────
+  const hdrs2 = ["ISIN","Emittente","Tipo","Seniority","Settore","Scadenza","Call",
+    "CCY","Cedola%","Ask","Rateo","Dirty","YTM%","YTC%","Duration","Rating",
+    "Peso%","Nominale €","Esborso €","Ced.Ann €","CY%"];
+  const rows2 = bonds.map(b=>[
+    b.isin, b.issuer||b.name, b.tipo, b.seniority, b.sector,
+    b.scadenza, b.callDate||"", b.valuta,
+    num4(b.cedola), num2(b.ask), num4(b.rateo||0), num2(calcDirtyPrice(b)),
+    num4(b.yldYtm), b.yldToCall?num4(b.yldToCall):"",
+    b.duration?num2(b.duration):"", b.rating,
+    num4(b.peso), num2(calcNominale(b,totale)),
+    num2(calcEsborso(b,totale)), num2(calcCouponAnnuo(b,totale)),
+    num2(calcCurrentYield(b)),
+  ]);
+  const ws2 = XLSX.utils.aoa_to_sheet([hdrs2,...rows2]);
+  ws2["!cols"] = [14,26,12,16,20,12,12,6,8,8,8,8,8,8,8,8,8,14,14,12,8].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb, ws2, "Titoli");
+
+  // ── Foglio 3: Flusso Cedolare mensile ─────────────────────────────────────
+  const MESI = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
+  const hdrs3 = ["ISIN","Emittente","Freq",...MESI,"Tot. Annuo"];
+  const rows3 = bonds.map(b=>{
+    const mesi = getCouponMonths(b);
+    const sing = mesi.length ? calcCouponAnnuo(b,totale)/mesi.length : 0;
+    const cells = MESI.map((_,mi)=>mesi.includes(mi+1)?num2(sing):0);
+    return [b.isin, b.issuer||b.name, b.couponFreq||1, ...cells, num2(calcCouponAnnuo(b,totale))];
+  });
+  // Riga totale
+  const totRow3 = ["","TOTALE","",...MESI.map((_,mi)=>
+    num2(bonds.reduce((s,b)=>{
+      const mesi=getCouponMonths(b);
+      return mesi.includes(mi+1)?s+calcCouponSingolo(b,totale):s;
+    },0))
+  ), num2(totCed)];
+  const ws3 = XLSX.utils.aoa_to_sheet([hdrs3,...rows3,totRow3]);
+  ws3["!cols"] = [{wch:14},{wch:26},{wch:6},...MESI.map(()=>({wch:10})),{wch:12}];
+  XLSX.utils.book_append_sheet(wb, ws3, "Flusso Cedolare");
+
+  // ── Foglio 4: Flussi pluriennali ──────────────────────────────────────────
+  const currentYear = new Date().getFullYear();
+  const YEARS = Array.from({length:16},(_,i)=>currentYear+i);
+  const hdrs4 = ["Anno","Cedole €","Rimb. Scadenza €","Rimb. Call €","Tot. Rimborsi €","Totale Anno €","% Portafoglio"];
+  // Stessa logica della dashboard: exit = min(call, scadenza)
+  const bondExitXl = (b) => {
+    const d = b.callDate ? new Date(b.callDate) : (b.scadenza ? new Date(b.scadenza) : null);
+    return d ? {yr:d.getFullYear(), mo:d.getMonth()+1} : {yr:9999, mo:12};
+  };
+  const rows4 = YEARS.map(yr=>{
+    const cedole = bonds.reduce((s,b)=>{
+      const exit=bondExitXl(b);
+      if(exit.yr<yr) return s;
+      const freq=b.couponFreq||1; if(!freq) return s;
+      const cedS=calcCouponSingolo(b,totale);
+      if(exit.yr===yr){
+        const pays=getCouponMonths(b).filter(m=>m<=exit.mo).length;
+        return s+cedS*pays;
+      }
+      return s+cedS*freq;
+    },0);
+    const rimCall=bonds.reduce((s,b)=>b.callDate&&new Date(b.callDate).getFullYear()===yr?s+calcNominale(b,totale):s,0);
+    const rimMat=bonds.reduce((s,b)=>{
+      if(b.callDate) return s;
+      return b.scadenza&&new Date(b.scadenza).getFullYear()===yr?s+calcNominale(b,totale):s;
+    },0);
+    const rim=rimCall+rimMat, tot=cedole+rim;
+    return [yr, num2(cedole), num2(rimMat), num2(rimCall), num2(rim), num2(tot),
+            totale>0?num2((tot/totale)*100):0];
+  }).filter(r=>r[5]>0);
+  const ws4 = XLSX.utils.aoa_to_sheet([hdrs4,...rows4]);
+  ws4["!cols"] = [{wch:6},{wch:14},{wch:18},{wch:14},{wch:16},{wch:14},{wch:14}];
+  XLSX.utils.book_append_sheet(wb, ws4, "Flussi Pluriennali");
+
+  // Download
+  const fname = `portafoglio_${today.replace(/\//g,"-")}.xlsx`;
+  XLSX.writeFile(wb, fname);
+}
+
 // ─── HELPERS REPORT ──────────────────────────────────────────────────────────
 // Genera una sezione di composizione HTML con barre CSS colorate
 function buildCompositionSection(title, data, colorMap) {
@@ -725,6 +842,9 @@ ${fontFace}
 body{font-family:${fontFam};font-size:11px;background:#fff;color:#111;padding:32px 36px}
 
 /* ── Print rules ─────────────────────────────────────────────────────── */
+/* Formato pagina — landscape per le tabelle larghe */
+@page{size:A4 landscape;margin:12mm 10mm}
+
 @media print{
   body{padding:10px 14px;font-size:10px}
   button{display:none!important}
@@ -741,14 +861,12 @@ body{font-family:${fontFam};font-size:11px;background:#fff;color:#111;padding:32
   .comp-grid{break-inside:avoid;page-break-inside:avoid}
   .kpis{break-inside:avoid;page-break-inside:avoid}
   .hdr{break-inside:avoid;page-break-inside:avoid}
-  /* cedole: la tabella è larga — forza landscape se supportato */
-  @page{size:A4 landscape;margin:12mm 10mm}
 }
 
 .hdr{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #f5c842;padding-bottom:14px;margin-bottom:20px}
 h1{font-size:22px;font-weight:800;color:#1a1a1a}.sub{font-size:10px;color:#9ca3af;margin-top:3px}
 .meta{font-size:10px;color:#6b7280;text-align:right;line-height:2}
-.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px}
+.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:20px}
 .kpi{background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px}
 .kpi.y{background:#fffbeb;border-color:#fde68a}
 .kpi.g{background:#f0fdf4;border-color:#bbf7d0}
@@ -807,11 +925,12 @@ tr:nth-child(even) td{background:#fafafa}
   </div>
 </div>
 
-<!-- KPI: 5 card su una riga -->
+<!-- KPI: 6 card su una riga -->
 <div class="kpis no-break">
   <div class="kpi y"><div class="l">YTM Ponderato</div><div class="v">${fp(stats.wtdYtm)}</div></div>
   <div class="kpi"><div class="l">Cedola Media</div><div class="v">${fp(stats.wtdCedola)}</div></div>
   <div class="kpi"><div class="l">Duration Media</div><div class="v">${Number(stats.wtdDuration).toFixed(2)} a</div></div>
+  <div class="kpi"><div class="l">Rating Medio</div><div class="v" style="color:${({"AAA":"#059669","AA+":"#10b981","AA":"#34d399","AA-":"#6ee7b7","A+":"#3b82f6","A":"#60a5fa","A-":"#93c5fd","BBB+":"#8b5cf6","BBB":"#a78bfa","BBB-":"#c4b5fd","BB+":"#ef4444","BB":"#f87171","ND":"#9ca3af"})[stats.wtdRating]||"#6b7280"}">${stats.wtdRating}</div></div>
   <div class="kpi y"><div class="l">Nominale Totale</div><div class="v">${fe(totNom)}</div></div>
   <div class="kpi y"><div class="l">Cedola Annua</div><div class="v">${fe(totCed)}</div></div>
 </div>
@@ -931,7 +1050,7 @@ ${(()=>{
 </div>
 
 <!-- DISCLAIMER PAGE — pagina dedicata, sempre ultima -->
-<div style="break-before:page;page-break-before:always;padding-top:32px;min-height:100vh;display:flex;flex-direction:column">
+<div style="break-before:page;page-break-before:always;padding-top:32px;display:flex;flex-direction:column">
 
   <!-- Header disclaimer -->
   <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #f5c842;padding-bottom:14px;margin-bottom:24px">
@@ -961,6 +1080,360 @@ ${(()=>{
   const w = window.open("","_blank");
   if(w){ w.document.write(html); w.document.close(); }
   else alert("Popup bloccato dal browser. Consenti i popup per questo sito.");
+}
+
+// ─── CASH FLOW PLURIENNALE ───────────────────────────────────────────────────
+function CashFlowPluriennale({ bonds, totale }) {
+  const [viewMode, setViewMode] = useState("chart");
+  const currentYear = new Date().getFullYear();
+  const YEARS = Array.from({length:16}, (_,i)=>currentYear+i);
+
+  const cashflows = useMemo(()=>{
+    // Helper: anno e mese dell'evento di uscita del bond dal portafoglio
+    // exitDate = callDate se presente, altrimenti scadenza
+    // Le cedole si calcolano solo fino all'anno di uscita (incluso, proporzionalmente)
+    const bondExit = (b) => {
+      const d = b.callDate ? new Date(b.callDate) : (b.scadenza ? new Date(b.scadenza) : null);
+      if(!d) return {yr:9999, mo:12};
+      return {yr:d.getFullYear(), mo:d.getMonth()+1}; // mo: 1-12
+    };
+
+    return YEARS.map(yr=>{
+      const cedole = bonds.reduce((s,b)=>{
+        const exit = bondExit(b);
+        // Bond già uscito dal portafoglio prima di quest'anno → 0
+        if(exit.yr < yr) return s;
+        const freq = b.couponFreq||1;
+        if(freq===0) return s;
+        const cedSingola = calcCouponSingolo(b,totale);
+        // Anno di uscita: conta solo i pagamenti cedolari PRIMA o NEL mese di uscita
+        if(exit.yr === yr) {
+          const mesiCedola = getCouponMonths(b); // es. [3,9] per semestrale
+          const paymentsThisYr = mesiCedola.filter(m => m <= exit.mo).length;
+          return s + cedSingola * paymentsThisYr;
+        }
+        // Anni precedenti all'uscita: tutti i pagamenti nell'anno
+        return s + cedSingola * freq;
+      },0);
+
+      // Rimborso a call: solo se callDate cade in questo anno
+      const rimborsoCall = bonds.reduce((s,b)=>{
+        if(!b.callDate) return s;
+        const callYr = new Date(b.callDate).getFullYear();
+        return callYr===yr ? s+calcNominale(b,totale) : s;
+      },0);
+
+      // Rimborso a scadenza: solo bond SENZA call (o con call non esercitata)
+      // Per convenzione: se il bond ha callDate, il rimborso è già contato in rimborsoCall
+      const rimborsoMat = bonds.reduce((s,b)=>{
+        if(b.callDate) return s; // con call → rimborso già in rimborsoCall
+        if(!b.scadenza) return s;
+        return new Date(b.scadenza).getFullYear()===yr ? s+calcNominale(b,totale) : s;
+      },0);
+
+      const rimborso = rimborsoMat+rimborsoCall;
+      return {yr,cedole,rimborsoMat,rimborsoCall,rimborso,totale:cedole+rimborso};
+    });
+  },[bonds,totale]);
+
+  const totCedolePlurien = cashflows.reduce((s,r)=>s+r.cedole,0);
+  const totRimborsi      = cashflows.reduce((s,r)=>s+r.rimborso,0);
+  const maxBar           = Math.max(...cashflows.map(r=>r.totale),1);
+  const fe2 = (n)=> n===0?"—":"€"+Number(n).toLocaleString("it-IT",{maximumFractionDigits:0});
+  const card2 = {background:"#fff",borderRadius:14,padding:"22px 24px",border:"1px solid #e5e7eb",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"};
+
+  return(
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:12}}>
+        <div>
+          <h2 style={{fontSize:22,fontWeight:800,margin:0}}>Flussi di Cassa Pluriennali</h2>
+          <p style={{fontSize:12,color:"#9ca3af",marginTop:4}}>Cedole + rimborsi capitali · {currentYear}–{currentYear+15} · sul nominale</p>
+        </div>
+        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+          <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:10,padding:"10px 16px",textAlign:"right"}}>
+            <p style={{fontSize:8,fontWeight:700,textTransform:"uppercase",color:"#15803d",marginBottom:2}}>Tot. Cedole</p>
+            <p style={{fontSize:15,fontWeight:800,color:"#15803d",fontFamily:"monospace",margin:0}}>{fe2(totCedolePlurien)}</p>
+          </div>
+          <div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"10px 16px",textAlign:"right"}}>
+            <p style={{fontSize:8,fontWeight:700,textTransform:"uppercase",color:"#2563eb",marginBottom:2}}>Tot. Rimborsi</p>
+            <p style={{fontSize:15,fontWeight:800,color:"#2563eb",fontFamily:"monospace",margin:0}}>{fe2(totRimborsi)}</p>
+          </div>
+          <div style={{display:"flex",border:"1px solid #e5e7eb",borderRadius:8,overflow:"hidden"}}>
+            {[["chart","📊 Grafico"],["table","📋 Tabella"]].map(([v,l])=>(
+              <button key={v} onClick={()=>setViewMode(v)}
+                style={{padding:"7px 14px",fontSize:11,fontWeight:700,cursor:"pointer",border:"none",
+                  background:viewMode===v?"#1a1a1a":"#fff",color:viewMode===v?"#f5c842":"#6b7280"}}>{l}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {viewMode==="chart"&&(
+        <div style={card2}>
+          <div style={{display:"flex",gap:16,marginBottom:16,flexWrap:"wrap"}}>
+            {[["#86efac","Cedole"],["#93c5fd","Rimborso a scadenza"],["#fde68a","Rimborso a call"]].map(([col,l])=>(
+              <div key={l} style={{display:"flex",alignItems:"center",gap:6}}>
+                <span style={{width:12,height:12,borderRadius:3,background:col,display:"inline-block"}}/>
+                <span style={{fontSize:11,color:"#6b7280"}}>{l}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{overflowX:"auto"}}>
+            <div style={{display:"flex",gap:4,alignItems:"flex-end",height:220,minWidth:700,paddingBottom:24}}>
+              {cashflows.map(({yr,cedole,rimborsoMat,rimborsoCall,totale:tot})=>{
+                const hCed=tot>0?(cedole/maxBar)*180:0;
+                const hMat=tot>0?(rimborsoMat/maxBar)*180:0;
+                const hCall=tot>0?(rimborsoCall/maxBar)*180:0;
+                return(
+                  <div key={yr} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center"}}
+                    title={`${yr} — Cedole: ${fe2(cedole)} | Rimb.: ${fe2(rimborsoMat+rimborsoCall)} | Tot: ${fe2(tot)}`}>
+                    {tot>0&&<span style={{fontSize:8,color:"#374151",fontWeight:700,marginBottom:2,whiteSpace:"nowrap"}}>
+                      {tot>=1000?(tot/1000).toFixed(1)+"k":tot.toFixed(0)}
+                    </span>}
+                    <div style={{width:"100%",display:"flex",flexDirection:"column",borderRadius:4,overflow:"hidden",minHeight:tot>0?undefined:2}}>
+                      {hCall>0&&<div style={{height:hCall,background:"#fde68a"}}/>}
+                      {hMat>0&&<div style={{height:hMat,background:"#93c5fd"}}/>}
+                      {hCed>0&&<div style={{height:hCed,background:"#86efac"}}/>}
+                      {tot===0&&<div style={{height:2,background:"#f3f4f6"}}/>}
+                    </div>
+                    <span style={{fontSize:8,color:"#6b7280",marginTop:4,whiteSpace:"nowrap"}}>{yr}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {viewMode==="table"&&(
+        <div style={{...card2,padding:0,overflow:"hidden"}}>
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,minWidth:700}}>
+              <thead>
+                <tr style={{background:"#1a1a1a"}}>
+                  {[["Anno","left","#fff"],["Cedole €","right","#86efac"],["Rimb. Scad.","right","#93c5fd"],
+                    ["Rimb. Call","right","#fde68a"],["Tot. Rimborsi","right","#bfdbfe"],
+                    ["Totale Anno","right","#f5c842"],["% Portafoglio","right","#9ca3af"]].map(([h,a,col])=>(
+                    <th key={h} style={{color:col,padding:"8px 10px",fontSize:8,fontWeight:700,
+                      textTransform:"uppercase",textAlign:a,whiteSpace:"nowrap"}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {cashflows.filter(r=>r.totale>0).map(({yr,cedole,rimborsoMat,rimborsoCall,rimborso,totale:tot},i)=>(
+                  <tr key={yr} style={{background:i%2===0?"#fafafa":"#fff",borderBottom:"1px solid #f3f4f6"}}>
+                    <td style={{padding:"7px 10px",fontWeight:700,color:"#374151"}}>{yr}</td>
+                    <td style={{padding:"7px 10px",textAlign:"right",fontFamily:"monospace",color:"#15803d",fontWeight:600}}>{fe2(cedole)}</td>
+                    <td style={{padding:"7px 10px",textAlign:"right",fontFamily:"monospace",color:"#2563eb"}}>{fe2(rimborsoMat)}</td>
+                    <td style={{padding:"7px 10px",textAlign:"right",fontFamily:"monospace",color:"#d97706"}}>{fe2(rimborsoCall)}</td>
+                    <td style={{padding:"7px 10px",textAlign:"right",fontFamily:"monospace",color:"#1d4ed8",fontWeight:600}}>{fe2(rimborso)}</td>
+                    <td style={{padding:"7px 10px",textAlign:"right",fontFamily:"monospace",fontWeight:800,color:"#1a1a1a"}}>{fe2(tot)}</td>
+                    <td style={{padding:"7px 10px",textAlign:"right",color:"#6b7280"}}>{totale>0?((tot/totale)*100).toFixed(1):0}%</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr style={{background:"#fffbeb",borderTop:"2px solid #f5c842"}}>
+                  <td style={{padding:"8px 10px",fontWeight:800}}>TOTALE</td>
+                  <td style={{padding:"8px 10px",textAlign:"right",fontFamily:"monospace",color:"#15803d",fontWeight:800}}>{fe2(totCedolePlurien)}</td>
+                  <td style={{padding:"8px 10px",textAlign:"right",fontFamily:"monospace",color:"#2563eb",fontWeight:800}}>{fe2(cashflows.reduce((s,r)=>s+r.rimborsoMat,0))}</td>
+                  <td style={{padding:"8px 10px",textAlign:"right",fontFamily:"monospace",color:"#d97706",fontWeight:800}}>{fe2(cashflows.reduce((s,r)=>s+r.rimborsoCall,0))}</td>
+                  <td style={{padding:"8px 10px",textAlign:"right",fontFamily:"monospace",color:"#1d4ed8",fontWeight:800}}>{fe2(totRimborsi)}</td>
+                  <td style={{padding:"8px 10px",textAlign:"right",fontFamily:"monospace",fontWeight:800,color:"#92400e"}}>{fe2(totCedolePlurien+totRimborsi)}</td>
+                  <td style={{padding:"8px 10px",textAlign:"right",fontWeight:700}}>—</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── SCENARIO RATES — analisi sensitività ai tassi ──────────────────────────
+//
+// Logica: ΔP ≈ -ModifiedDuration × ΔRate × Valore
+// Per ogni titolo: P&L stimato = -duration × (shock/100) × esborso
+// A livello portafoglio: somma pesata dei P&L individuali
+//
+function ScenarioRates({ bonds, totale, stats }) {
+  const [shock, setShock] = useState(0); // bp: -300 … +300
+
+  const scenarios = useMemo(()=>{
+    // Calcola P&L stimato per ogni shock da -300 a +300 bp step 50
+    const shocks = [-300,-250,-200,-150,-100,-50,-25,0,25,50,100,150,200,250,300];
+    return shocks.map(bp=>{
+      const dRate = bp/100; // in percentuale
+      const plEur = bonds.reduce((s,b)=>{
+        const dur   = b.duration||stats.wtdDuration||0;
+        const esb   = calcEsborso(b,totale);
+        // Approssimazione lineare: ΔP/P ≈ -ModDur × ΔRate
+        return s + (-dur * (dRate/100) * esb);
+      },0);
+      const plPct = totale > 0 ? (plEur/totale)*100 : 0;
+      return { bp, plEur, plPct };
+    });
+  },[bonds,totale,stats]);
+
+  // P&L per lo shock corrente (slider)
+  const currentPL = useMemo(()=>{
+    const dRate = shock/100;
+    const plEur = bonds.reduce((s,b)=>{
+      const dur = b.duration||stats.wtdDuration||0;
+      const esb = calcEsborso(b,totale);
+      return s + (-dur*(dRate/100)*esb);
+    },0);
+    return { plEur, plPct: totale>0?(plEur/totale)*100:0 };
+  },[bonds,totale,stats,shock]);
+
+  const C2 = { pos:"#15803d", neg:"#dc2626", posL:"#f0fdf4", negL:"#fff1f2",
+               posB:"#bbf7d0", negB:"#fecdd3" };
+  const isPos = currentPL.plEur >= 0;
+  const accentC = isPos ? C2.pos : C2.neg;
+  const accentL = isPos ? C2.posL : C2.negL;
+  const accentB = isPos ? C2.posB : C2.negB;
+
+  return(
+    <div style={{...{background:"#fff",borderRadius:14,padding:"22px 24px",
+      border:"1px solid #e5e7eb",boxShadow:"0 1px 4px rgba(0,0,0,0.05)"},marginTop:16}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18,flexWrap:"wrap",gap:12}}>
+        <div>
+          <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",color:"#9ca3af",marginBottom:4}}>
+            ANALISI SCENARIO
+          </p>
+          <h3 style={{fontSize:17,fontWeight:800,color:"#1a1a1a",margin:0}}>Sensitività ai Tassi di Interesse</h3>
+          <p style={{fontSize:11,color:"#9ca3af",marginTop:3}}>
+            Approssimazione lineare · ΔP ≈ −Duration × ΔRate × Esborso · Duration pond. {stats.wtdDuration.toFixed(2)} anni
+          </p>
+        </div>
+        {/* Badge P&L corrente */}
+        <div style={{background:accentL,border:`1px solid ${accentB}`,borderRadius:10,padding:"12px 18px",textAlign:"right",minWidth:160}}>
+          <p style={{fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",color:accentC,marginBottom:4}}>
+            {shock===0?"Scenario neutro":`Shock ${shock>0?"+":""}${shock} bp`}
+          </p>
+          <p style={{fontSize:22,fontWeight:800,color:accentC,fontFamily:"monospace",margin:0}}>
+            {currentPL.plEur>=0?"+":""}{Number(currentPL.plEur).toLocaleString("it-IT",{minimumFractionDigits:0,maximumFractionDigits:0})} €
+          </p>
+          <p style={{fontSize:11,color:accentC,marginTop:2}}>
+            {currentPL.plPct>=0?"+":""}{currentPL.plPct.toFixed(2)}% sul portafoglio
+          </p>
+        </div>
+      </div>
+
+      {/* Slider */}
+      <div style={{marginBottom:18}}>
+        <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"#9ca3af",marginBottom:6}}>
+          <span>−300 bp</span>
+          <span style={{fontWeight:700,color:"#374151"}}>
+            Shock tassi: <b style={{color:shock===0?"#9ca3af":shock>0?"#dc2626":"#15803d"}}>
+              {shock===0?"Neutro (0 bp)":`${shock>0?"+":""}${shock} bp`}
+            </b>
+          </span>
+          <span>+300 bp</span>
+        </div>
+        <input type="range" min={-300} max={300} step={25} value={shock}
+          onChange={e=>setShock(Number(e.target.value))}
+          style={{width:"100%",accentColor:"#f5c842",cursor:"pointer",height:6}}/>
+        {/* Marcatori */}
+        <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
+          {[-300,-200,-100,0,100,200,300].map(v=>(
+            <button key={v} onClick={()=>setShock(v)}
+              style={{fontSize:9,padding:"2px 6px",borderRadius:6,cursor:"pointer",fontWeight:700,
+                background:shock===v?"#1a1a1a":"transparent",
+                color:shock===v?"#f5c842":v===0?"#9ca3af":v>0?"#ef444488":"#22c55e88",
+                border:`1px solid ${shock===v?"#1a1a1a":v===0?"#e5e7eb":v>0?"#fecdd3":"#bbf7d0"}`}}>
+              {v===0?"Neutro":`${v>0?"+":""}${v}`}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Barre scenario per bp preimpostati */}
+      <div style={{overflowX:"auto"}}>
+        <div style={{display:"flex",gap:6,minWidth:600,alignItems:"flex-end",height:100}}>
+          {scenarios.map(({bp,plEur,plPct})=>{
+            const maxAbs = Math.max(...scenarios.map(s=>Math.abs(s.plEur)),1);
+            const barH   = Math.max(Math.abs(plEur)/maxAbs*80,2);
+            const isP    = plEur>=0;
+            const isCur  = bp===shock;
+            return(
+              <div key={bp} onClick={()=>setShock(bp)}
+                style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",cursor:"pointer"}}>
+                <span style={{fontSize:8,color:isP?"#15803d":"#dc2626",fontWeight:700,marginBottom:2,whiteSpace:"nowrap"}}>
+                  {plEur>=0?"+":""}{(plEur/1000).toFixed(1)}k
+                </span>
+                <div style={{width:"100%",background:isP?"#bbf7d0":"#fecdd3",
+                  border:`2px solid ${isCur?(isP?"#15803d":"#dc2626"):"transparent"}`,
+                  borderRadius:4,height:barH,
+                  backgroundColor:isP?(isCur?"#15803d":"#86efac"):(isCur?"#dc2626":"#fca5a5"),
+                  transition:"all 0.2s"}}/>
+                <span style={{fontSize:8,color:isCur?"#1a1a1a":"#9ca3af",fontWeight:isCur?700:400,
+                  marginTop:3,whiteSpace:"nowrap"}}>
+                  {bp===0?"0":`${bp>0?"+":""}${bp}`}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Tabella per titolo — collassabile */}
+      <details style={{marginTop:14}}>
+        <summary style={{fontSize:10,fontWeight:700,color:"#6b7280",cursor:"pointer",
+          textTransform:"uppercase",letterSpacing:"0.08em",userSelect:"none"}}>
+          Dettaglio per titolo {shock===0?"(seleziona uno shock)":`— Shock ${shock>0?"+":""}${shock} bp`}
+        </summary>
+        {shock!==0&&(
+          <div style={{overflowX:"auto",marginTop:10}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,minWidth:600}}>
+              <thead>
+                <tr style={{background:"#1a1a1a"}}>
+                  {["Emittente","ISIN","Duration","Esborso €","ΔP stimato €","ΔP%"].map(h=>(
+                    <th key={h} style={{color:"#fff",padding:"6px 8px",fontSize:8,fontWeight:700,
+                      textTransform:"uppercase",textAlign:h.startsWith("ΔP")||h==="Esborso €"||h==="Duration"?"right":"left",
+                      whiteSpace:"nowrap"}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[...bonds].sort((a,b)=>{
+                  const pa=-((a.duration||0)*(shock/10000)*calcEsborso(a,totale));
+                  const pb=-((b.duration||0)*(shock/10000)*calcEsborso(b,totale));
+                  return shock>0?pa-pb:pb-pa;
+                }).map((b,i)=>{
+                  const dur=b.duration||stats.wtdDuration||0;
+                  const esb=calcEsborso(b,totale);
+                  const pl=-dur*(shock/10000)*esb;
+                  const plPct=esb>0?(pl/esb)*100:0;
+                  const isP=pl>=0;
+                  return(
+                    <tr key={b.isin} style={{background:i%2===0?"#fafafa":"#fff",
+                      borderBottom:"1px solid #f3f4f6"}}>
+                      <td style={{padding:"5px 8px",fontSize:10,color:"#6b7280",whiteSpace:"nowrap"}}>{(b.issuer||b.name).substring(0,28)}</td>
+                      <td style={{padding:"5px 8px",fontFamily:"monospace",fontSize:9,color:"#9ca3af"}}>{b.isin}</td>
+                      <td style={{padding:"5px 8px",textAlign:"right",fontFamily:"monospace"}}>{dur.toFixed(2)}</td>
+                      <td style={{padding:"5px 8px",textAlign:"right",fontFamily:"monospace",color:"#2563eb"}}>
+                        {Number(esb).toLocaleString("it-IT",{minimumFractionDigits:0,maximumFractionDigits:0})}
+                      </td>
+                      <td style={{padding:"5px 8px",textAlign:"right",fontFamily:"monospace",fontWeight:700,
+                        color:isP?"#15803d":"#dc2626"}}>
+                        {pl>=0?"+":""}{Number(pl).toLocaleString("it-IT",{minimumFractionDigits:0,maximumFractionDigits:0})}
+                      </td>
+                      <td style={{padding:"5px 8px",textAlign:"right",fontWeight:700,
+                        color:isP?"#15803d":"#dc2626"}}>
+                        {plPct>=0?"+":""}{plPct.toFixed(2)}%
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </details>
+    </div>
+  );
 }
 
 // ─── IFIELD — componente esterno per evitare rimount ad ogni render ──────────
@@ -1026,6 +1499,15 @@ function IField({ v, onCommit, w=60, color="#1a1a1a", type="number", align="righ
   );
 }
 
+// ─── RATING SCALE ────────────────────────────────────────────────────────────
+const RATING_SCALE = [
+  "AAA","AA+","AA","AA-","A+","A","A-",
+  "BBB+","BBB","BBB-","BB+","BB","BB-",
+  "B+","B","B-","CCC","CC","C","D","ND"
+];
+const ratingToNum = (r) => { const i=RATING_SCALE.indexOf(r); return i>=0?i+1:RATING_SCALE.length; };
+const numToRating = (n) => RATING_SCALE[Math.min(Math.max(Math.round(n)-1,0),RATING_SCALE.length-1)];
+
 // ─── APP ──────────────────────────────────────────────────────────────────────
 const EMPTY_BOND = {
   valuta:"EUR",issuer:"",isin:"",name:"",scadenza:"",callDate:"",
@@ -1061,7 +1543,11 @@ export default function App() {
     const totNominale  = bonds.reduce((s,b)=>s+calcNominale(b,totale),0);
     const totEffettivo = bonds.reduce((s,b)=>s+calcEffettivo(b,totale),0);
     const totCoupon    = bonds.reduce((s,b)=>s+calcCouponAnnuo(b,totale),0);
-    return {wtdYtm,wtdCedola,wtdDuration,totNominale,totEffettivo,totCoupon,disaggio:totNominale-totEffettivo};
+    const totPeso      = bonds.reduce((s,b)=>s+b.peso,0)||1;
+    const wtdRatingNum = bonds.reduce((s,b)=>s+ratingToNum(b.rating)*b.peso,0)/totPeso;
+    const wtdRating    = numToRating(wtdRatingNum);
+    return {wtdYtm,wtdCedola,wtdDuration,totNominale,totEffettivo,totCoupon,
+            disaggio:totNominale-totEffettivo,wtdRating,wtdRatingNum};
   },[bonds,totale]);
 
   const monthlyData = useMemo(()=>MONTHS.map((m,mi)=>{
@@ -1264,13 +1750,14 @@ export default function App() {
             <input ref={fileRef} type="file" accept=".csv" style={{display:"none"}} onChange={onCSV}/>
             <Btn sm onClick={()=>fileRef.current.click()}>⬆ CSV</Btn>
             <Btn sm onClick={downloadCSVTemplate}>⬇ Template</Btn>
+            <Btn sm onClick={()=>exportExcel(bonds,totale,stats,monthlyData)}>📊 Excel</Btn>
             <Btn primary sm onClick={()=>openReport(bonds,totale,stats,monthlyData)}>📄 Report</Btn>
           </div>
         </div>
         {/* Tabs — scrollabili su schermi stretti */}
         <div style={{borderTop:`1px solid ${C.border}`,overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none"}}>
           <div style={{display:"flex",gap:0,padding:"0 16px",minWidth:"max-content"}}>
-            {[["overview","Panoramica"],["bonds","Titoli"],["cedole","Cedole"],["scadenze","Scadenze"],["composizione","Composizione"]].map(([id,l])=>(
+            {[["overview","Panoramica"],["bonds","Titoli"],["cedole","Cedole"],["scadenze","Scadenze"],["flussi","Flussi"],["composizione","Composizione"]].map(([id,l])=>(
               <TabBtn key={id} id={id} label={l}/>
             ))}
           </div>
@@ -1345,20 +1832,26 @@ export default function App() {
               ))}
             </div>
 
-            {/* KPI metriche */}
-            <div className="ba-grid-4" style={{marginBottom:22}}>
+            {/* KPI metriche — 5 card */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:14,marginBottom:22}}>
               {[
-                {l:"YTM Ponderato",  v:fp(stats.wtdYtm),              s:"Yield to Maturity",      y:true },
-                {l:"Cedola Media",   v:fp(stats.wtdCedola),            s:"Tasso cedolare medio",   y:false},
-                {l:"Duration Media", v:`${stats.wtdDuration.toFixed(2)} anni`, s:"Sensitività al tasso", y:false},
-                {l:"Cedola Annua",   v:fe(stats.totCoupon),            s:"Cash flow sul nominale", y:true },
-              ].map((k,i)=>(
-                <div key={i} style={{...card,padding:"20px 24px",background:k.y?C.yellowL:C.card,border:`1px solid ${k.y?C.yellowB:C.border}`}}>
-                  <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8,color:k.y?"#92400e":C.gray}}>{k.l}</p>
-                  <p style={{fontSize:28,fontWeight:800,color:k.y?"#78350f":C.dark,letterSpacing:"-.5px",marginBottom:2}}>{k.v}</p>
-                  <p style={{fontSize:11,color:k.y?"#a16207":C.gray}}>{k.s}</p>
-                </div>
-              ))}
+                {l:"YTM Ponderato",  v:fp(stats.wtdYtm),                      s:"Yield to Maturity",      y:true},
+                {l:"Cedola Media",   v:fp(stats.wtdCedola),                    s:"Tasso cedolare medio",   y:false},
+                {l:"Duration Media", v:`${stats.wtdDuration.toFixed(2)} anni`, s:"Sensitività al tasso",   y:false},
+                {l:"Rating Medio",   v:stats.wtdRating,                        s:`Score: ${stats.wtdRatingNum.toFixed(1)}`, y:false, r:true},
+                {l:"Cedola Annua",   v:fe(stats.totCoupon),                    s:"Cash flow sul nominale", y:true},
+              ].map((k,i)=>{
+                const rc=k.r?(RATING_COLORS[stats.wtdRating]||C.blue):null;
+                return(
+                  <div key={i} style={{...card,padding:"20px 24px",
+                    background:k.y?C.yellowL:k.r?rc+"11":C.card,
+                    border:`1px solid ${k.y?C.yellowB:k.r?rc+"44":C.border}`}}>
+                    <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8,color:k.y?"#92400e":k.r?rc:C.gray}}>{k.l}</p>
+                    <p style={{fontSize:28,fontWeight:800,letterSpacing:"-.5px",marginBottom:2,color:k.y?"#78350f":k.r?rc:C.dark}}>{k.v}</p>
+                    <p style={{fontSize:11,color:k.y?"#a16207":k.r?rc:C.gray}}>{k.s}</p>
+                  </div>
+                );
+              })}
             </div>
 
             <div className="ba-chart-row">
@@ -1398,6 +1891,10 @@ export default function App() {
                 <span>I pesi sommano <b>{totalePeso.toFixed(4)}%</b> — portafoglio non bilanciato al 100%.</span>
               </div>
             )}
+
+            {/* ── SCENARIO TASSI ─────────────────────────────────────────── */}
+            <ScenarioRates bonds={bonds} totale={totale} stats={stats}/>
+
           </div>
         )}
 
@@ -1735,11 +2232,29 @@ export default function App() {
             </div>
             <div style={{...card,padding:0,overflow:"hidden"}}>
               <div className="ba-table-wrap">
-                <table style={{minWidth:900,width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                <table style={{minWidth:1100,width:"100%",borderCollapse:"collapse",fontSize:11.5}}>
                   <thead>
-                    <tr>{["ISIN","Emittente","Tipo","Seniority","Scadenza","Call","Rating","Peso%","Nom.€","Esb.€","CY%","YTM%","YTC%"].map(h=>(
-                      <th key={h} style={{...TH,...(h==="CY%"?{color:"#d97706"}:{})}}>{h}</th>
-                    ))}</tr>
+                    <tr>
+                      {/* Colonne con larghezza minima esplicita per evitare sfasamento */}
+                      {[
+                        {h:"ISIN",     w:108, align:"left"},
+                        {h:"Emittente",w:160, align:"left"},
+                        {h:"Tipo",     w:100, align:"left"},
+                        {h:"Seniority",w:90,  align:"left"},
+                        {h:"Scadenza", w:92,  align:"left"},
+                        {h:"Call",     w:92,  align:"left"},
+                        {h:"Rating",   w:62,  align:"left"},
+                        {h:"Peso%",    w:65,  align:"right"},
+                        {h:"Nom.€",    w:90,  align:"right"},
+                        {h:"Esb.€",    w:90,  align:"right"},
+                        {h:"CY%",      w:62,  align:"right", yellow:true},
+                        {h:"YTM%",     w:62,  align:"right"},
+                        {h:"YTC%",     w:62,  align:"right"},
+                      ].map(({h,w,align,yellow})=>(
+                        <th key={h} style={{...TH, minWidth:w, textAlign:align,
+                          ...(yellow?{color:"#d97706"}:{})}}>{h}</th>
+                      ))}
+                    </tr>
                   </thead>
                   <tbody>
                     {[...bonds].sort((a,b)=>new Date(a.scadenza)-new Date(b.scadenza)).map(b=>{
@@ -1747,23 +2262,23 @@ export default function App() {
                       return(
                         <tr key={b.isin} onMouseEnter={e=>e.currentTarget.style.background=C.lgray}
                           onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                          <td style={{...TD,fontFamily:"monospace",fontSize:10,color:C.gray}}>{b.isin}</td>
-                          <td style={{...TD,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:11,color:C.gray}}>{b.issuer}</td>
-                          <td style={{...TD,padding:"7px 11px"}}><Pill bg={TIPO_BG[b.tipo]} color={TIPO_COLORS[b.tipo]} border={TIPO_COLORS[b.tipo]+"44"}>{b.tipo}</Pill></td>
-                          <td style={{...TD,padding:"7px 11px"}}>
+                          <td style={{...TD,fontFamily:"monospace",fontSize:10,color:C.gray,whiteSpace:"nowrap"}}>{b.isin}</td>
+                          <td style={{...TD,whiteSpace:"nowrap",fontSize:11,color:C.gray}}>{b.issuer}</td>
+                          <td style={{...TD,padding:"7px 8px",whiteSpace:"nowrap"}}><Pill bg={TIPO_BG[b.tipo]} color={TIPO_COLORS[b.tipo]} border={TIPO_COLORS[b.tipo]+"44"}>{b.tipo}</Pill></td>
+                          <td style={{...TD,padding:"7px 8px",whiteSpace:"nowrap"}}>
                             <Pill bg={SENIORITY_BG[b.seniority]||C.greenL} color={SENIORITY_COLORS[b.seniority]||C.green} border={(SENIORITY_COLORS[b.seniority]||C.green)+"44"}>
                               {(b.seniority||"Senior").replace("Unsecured","").replace("Secured","Sec.").trim()}
                             </Pill>
                           </td>
-                          <td style={{...TD,fontFamily:"monospace",fontSize:11,fontWeight:600}}>{fmtDate(b.scadenza)}</td>
-                          <td style={{...TD,fontFamily:"monospace",fontSize:11,color:b.callDate?"#d97706":C.gray,fontWeight:b.callDate?700:400}}>{fmtDate(b.callDate)}</td>
-                          <td style={{...TD,padding:"7px 11px"}}><Pill bg={`${RATING_COLORS[b.rating]||C.blue}22`} color={RATING_COLORS[b.rating]||C.blue} border={`${RATING_COLORS[b.rating]||C.blue}44`}>{b.rating}</Pill></td>
-                          <td style={{...TD,textAlign:"right",fontWeight:600}}>{b.peso.toFixed(4)}%</td>
-                          <td style={{...TD,textAlign:"right",color:C.green,fontFamily:"monospace",fontWeight:600}}>{fe(calcNominale(b,totale))}</td>
-                          <td style={{...TD,textAlign:"right",color:C.blue,fontFamily:"monospace",fontWeight:600}}>{fe(calcEffettivo(b,totale))}</td>
-                          <td style={{...TD,textAlign:"right",fontWeight:700,color:cy<b.cedola?C.red:cy>b.cedola?C.green:C.dark}}>{cy.toFixed(3)}%</td>
-                          <td style={{...TD,textAlign:"right",fontWeight:700,color:C.green}}>{b.yldYtm.toFixed(3)}%</td>
-                          <td style={{...TD,textAlign:"right",color:b.yldToCall?"#d97706":C.border}}>{b.yldToCall?`${Number(b.yldToCall).toFixed(3)}%`:"—"}</td>
+                          <td style={{...TD,fontFamily:"monospace",fontSize:11,fontWeight:600,whiteSpace:"nowrap"}}>{fmtDate(b.scadenza)}</td>
+                          <td style={{...TD,fontFamily:"monospace",fontSize:11,whiteSpace:"nowrap",color:b.callDate?"#d97706":C.gray,fontWeight:b.callDate?700:400}}>{fmtDate(b.callDate)}</td>
+                          <td style={{...TD,padding:"7px 8px",whiteSpace:"nowrap"}}><Pill bg={`${RATING_COLORS[b.rating]||C.blue}22`} color={RATING_COLORS[b.rating]||C.blue} border={`${RATING_COLORS[b.rating]||C.blue}44`}>{b.rating}</Pill></td>
+                          <td style={{...TD,textAlign:"right",fontWeight:600,whiteSpace:"nowrap"}}>{b.peso.toFixed(2)}%</td>
+                          <td style={{...TD,textAlign:"right",color:C.green,fontFamily:"monospace",fontWeight:600,whiteSpace:"nowrap"}}>{fe(calcNominale(b,totale))}</td>
+                          <td style={{...TD,textAlign:"right",color:C.blue,fontFamily:"monospace",fontWeight:600,whiteSpace:"nowrap"}}>{fe(calcEsborso(b,totale))}</td>
+                          <td style={{...TD,textAlign:"right",fontWeight:700,whiteSpace:"nowrap",color:cy<b.cedola?C.red:cy>b.cedola?C.green:C.dark}}>{cy.toFixed(3)}%</td>
+                          <td style={{...TD,textAlign:"right",fontWeight:700,color:C.green,whiteSpace:"nowrap"}}>{b.yldYtm.toFixed(3)}%</td>
+                          <td style={{...TD,textAlign:"right",whiteSpace:"nowrap",color:b.yldToCall?"#d97706":C.border}}>{b.yldToCall?`${Number(b.yldToCall).toFixed(3)}%`:"—"}</td>
                         </tr>
                       );
                     })}
@@ -1772,6 +2287,11 @@ export default function App() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* ═══════════════ FLUSSI PLURIENNALI ════════════════════════════ */}
+        {activeTab==="flussi"&&(
+          <CashFlowPluriennale bonds={bonds} totale={totale}/>
         )}
 
         {/* ═══════════════ COMPOSIZIONE ════════════════════════════════════ */}
@@ -1815,6 +2335,7 @@ export default function App() {
               <div className="ba-metrics">
                 {[
                   ["YTM Ponderato",   fp(stats.wtdYtm),               C.green],
+                  ["Rating Medio",    stats.wtdRating,                 RATING_COLORS[stats.wtdRating]||C.blue],
                   ["CY Media Pond.",  fp(bonds.reduce((s,b)=>s+calcCurrentYield(b)*b.peso/100,0)), "#d97706"],
                   ["Cedola Media",    fp(stats.wtdCedola),             C.dark],
                   ["Duration Pond.",  `${stats.wtdDuration.toFixed(2)} anni`, C.dark],
