@@ -1,5 +1,4 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from "react";
-import * as XLSX from "xlsx";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from "recharts";
 
 // ─── GLOBAL RESPONSIVE CSS ────────────────────────────────────────────────────
@@ -598,7 +597,22 @@ function getLogoSrc() {
 //   3. Flusso Ced.  — matrice mesi × bond (come tab Cedole)
 //   4. Flussi Anno  — cash flow pluriennali (cedole + rimborsi)
 //
-function exportExcel(bonds, totale, stats, monthlyData) {
+async function exportExcel(bonds, totale, stats, monthlyData) {
+  // Carica SheetJS via CDN solo al primo utilizzo (lazy load)
+  let XLSX;
+  if(window._XLSX) {
+    XLSX = window._XLSX;
+  } else {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+      s.onload = () => { XLSX = window.XLSX; window._XLSX = window.XLSX; resolve(); };
+      s.onerror = () => reject(new Error('Impossibile caricare SheetJS'));
+      document.head.appendChild(s);
+    });
+    XLSX = window.XLSX;
+  }
+  if(!XLSX) { alert('Errore caricamento libreria Excel. Verifica la connessione.'); return; }
   const wb   = XLSX.utils.book_new();
   const today = new Date().toLocaleDateString("it-IT");
 
