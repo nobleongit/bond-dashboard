@@ -810,9 +810,9 @@ async function openReport(bonds,totale,stats,monthlyData) {
     <td align="right"><b style="color:#1a5276">${fp(b.yldYtm)}</b></td>
     <td align="right" style="color:#d97706">${b.yldToCall?fp(b.yldToCall):"—"}</td>
     <td align="right">${fp(b.peso,2)}</td>
-    <td align="right" style="color:#15803d"><b>${feCcy(convertToBase(calcNominale(b,totale),b.valuta||"EUR",fxRates,pfCcy))}</b></td>
-    <td align="right" style="color:#1e40af">${feCcy(convertToBase(calcEffettivo(b,totale),b.valuta||"EUR",fxRates,pfCcy))}</td>
-    <td align="right" style="color:#92400e">${feCcy(convertToBase(calcCouponAnnuo(b,totale),b.valuta||"EUR",fxRates,pfCcy))}</td>
+    <td align="right" style="color:#15803d"><b>${fe(calcNominale(b,totale))}</b></td>
+    <td align="right" style="color:#1e40af">${fe(calcEffettivo(b,totale))}</td>
+    <td align="right" style="color:#92400e">${fe(calcCouponAnnuo(b,totale))}</td>
   </tr>`).join("");
 
   // ── Flusso cedolare ───────────────────────────────────────────────────────
@@ -1295,8 +1295,14 @@ function FxRates({ onRates }) {
 }
 
 // ─── CASH FLOW PLURIENNALE ───────────────────────────────────────────────────
-function CashFlowPluriennale({ bonds, totale }) {
+function CashFlowPluriennale({ bonds, totale, fxRates, pfCcy }) {
   const [viewMode, setViewMode] = useState("chart");
+  // Formattatore valuta locale basato su pfCcy
+  const feCcyLocal = (n) => {
+    const sym = pfCcy==="USD" ? "$" : "€";
+    return sym+Number(n).toLocaleString("it-IT",{minimumFractionDigits:0,maximumFractionDigits:0});
+  };
+  const convLocal = (amount, bondCcy) => convertToBase(amount, bondCcy||"EUR", fxRates, pfCcy);
   const currentYear = new Date().getFullYear();
   const YEARS = Array.from({length:16}, (_,i)=>currentYear+i);
 
@@ -1351,7 +1357,7 @@ function CashFlowPluriennale({ bonds, totale }) {
   const totCedolePlurien = cashflows.reduce((s,r)=>s+r.cedole,0);
   const totRimborsi      = cashflows.reduce((s,r)=>s+r.rimborso,0);
   const maxBar           = Math.max(...cashflows.map(r=>r.totale),1);
-  const fe2 = (n)=> n===0?"—":"€"+Number(n).toLocaleString("it-IT",{maximumFractionDigits:0});
+  const fe2 = (n)=> n===0?"—":feCcyLocal(n);
   const card2 = {background:"#fff",borderRadius:14,padding:"22px 24px",border:"1px solid #e5e7eb",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"};
 
   return(
@@ -2590,7 +2596,7 @@ export default function App() {
 
         {/* ═══════════════ FLUSSI PLURIENNALI ════════════════════════════ */}
         {activeTab==="flussi"&&(
-          <CashFlowPluriennale bonds={bonds} totale={totale}/>
+          <CashFlowPluriennale bonds={bonds} totale={totale} fxRates={fxRates} pfCcy={pfCcy}/>
         )}
 
         {/* ═══════════════ COMPOSIZIONE ════════════════════════════════════ */}
