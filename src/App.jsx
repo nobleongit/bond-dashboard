@@ -204,6 +204,16 @@ const checkNominale = (nom, taglioMin, incrMin) => {
   return { ok:true };
 };
 
+// ─── CONVERSIONE FX ──────────────────────────────────────────────────────────
+const convertToBase = (amount, bondCcy, rates, pfCcy) => {
+  if(!rates || !bondCcy) return amount;
+  const b = bondCcy.toUpperCase(), p = pfCcy.toUpperCase();
+  if(b === p) return amount;
+  if(b === "EUR" && p !== "EUR") return amount * (rates[p] || 1);
+  if(p === "EUR" && b !== "EUR") return amount / (rates[b] || 1);
+  return (amount / (rates[b] || 1)) * (rates[p] || 1); // cross via EUR
+};
+
 // Converte YYYY-MM-DD → DD/MM/YYYY per la visualizzazione (convenzione europea)
 const fmtDate = (s) => {
   if(!s) return "—";
@@ -800,9 +810,9 @@ async function openReport(bonds,totale,stats,monthlyData) {
     <td align="right"><b style="color:#1a5276">${fp(b.yldYtm)}</b></td>
     <td align="right" style="color:#d97706">${b.yldToCall?fp(b.yldToCall):"—"}</td>
     <td align="right">${fp(b.peso,2)}</td>
-    <td align="right" style="color:#15803d"><b>${fe(calcNominale(b,totale))}</b></td>
-    <td align="right" style="color:#1e40af">${fe(calcEffettivo(b,totale))}</td>
-    <td align="right" style="color:#92400e">${fe(calcCouponAnnuo(b,totale))}</td>
+    <td align="right" style="color:#15803d"><b>${feCcy(convertToBase(calcNominale(b,totale),b.valuta||"EUR",fxRates,pfCcy))}</b></td>
+    <td align="right" style="color:#1e40af">${feCcy(convertToBase(calcEffettivo(b,totale),b.valuta||"EUR",fxRates,pfCcy))}</td>
+    <td align="right" style="color:#92400e">${feCcy(convertToBase(calcCouponAnnuo(b,totale),b.valuta||"EUR",fxRates,pfCcy))}</td>
   </tr>`).join("");
 
   // ── Flusso cedolare ───────────────────────────────────────────────────────
@@ -1128,16 +1138,15 @@ ${(()=>{
 
 // ─── FX RATES — tassi di cambio in tempo reale (Frankfurter / BCE) ──────────
 // API: https://api.frankfurter.app — fonte BCE, open source, zero registrazione
-function FxRates() {
+function FxRates({ rates, loading, onRatesFetched }) {
   const PAIRS = ["USD","GBP","CHF","JPY","CNY"];
-  const [rates, setRates] = useState(null);   // {USD:1.08, GBP:0.85, ...}
-  const [ts,    setTs]    = useState(null);   // timestamp ultimo aggiornamento
-  const [err,   setErr]   = useState(false);
-  const [open,  setOpen]  = useState(false);  // dropdown aperto/chiuso
-  const [loading, setLoading] = useState(false);
+  const [ts,   setTs]  = useState(null);
+  const [err,  setErr] = useState(false);
+  const [open, setOpen]= useState(false);
 
   const fetchRates = useCallback(async () => {
-    setLoading(true); setErr(false);
+    onRatesFetched(null, true, false);
+    setErr(false);
     // Provider in ordine di priorità — tutti gratuiti, no API key
     // open.er-api.com: CORS aperto (funziona in localhost e produzione)
     // frankfurter.app: fonte BCE (funziona in produzione, CORS restrittivo in locale)
@@ -1164,19 +1173,18 @@ function FxRates() {
         const d = await r.json();
         const parsed = provider.parse(d);
         if(Object.keys(parsed).length === 0) continue;
-        setRates(parsed);
+        onRatesFetched(parsed, false, false);
         setTs(new Date().toLocaleTimeString("it-IT", {hour:"2-digit",minute:"2-digit"}));
         setErr(false);
-        setLoading(false);
-        return; // successo — fermati qui
+        return;
       } catch(e) {
         continue; // prova provider successivo
       }
     }
     // Tutti i provider falliti
+    onRatesFetched(null, false, true);
     setErr(true);
-    setLoading(false);
-  }, []);
+  }, [onRatesFetched]);
 
   // Carica al mount
   useEffect(() => { fetchRates(); }, [fetchRates]);
@@ -1334,7 +1342,7 @@ function CashFlowPluriennale({ bonds, totale }) {
       const rimborso = rimborsoMat+rimborsoCall;
       return {yr,cedole,rimborsoMat,rimborsoCall,rimborso,totale:cedole+rimborso};
     });
-  },[bonds,totale]);
+  },[bonds,totale,fxRates,pfCcy]);
 
   const totCedolePlurien = cashflows.reduce((s,r)=>s+r.cedole,0);
   const totRimborsi      = cashflows.reduce((s,r)=>s+r.rimborso,0);
@@ -1734,7 +1742,18 @@ export default function App() {
   useGlobalCSS();
   const [bonds,setBonds]               = useState(INITIAL_BONDS);
   const [totale,setTotale]             = useState(100000);
-  const [rawTotale,setRawTotale]       = useState("100000"); // stringa per input controllato
+  const [pfCcy,setPfCcy]               = useState("EUR");
+  const [fxRates,setFxRates]           = useState(null);
+  const [fxLoading,setFxLoading]       = useState(false);
+  const onRatesFetched = useCallback((r,l)=>{ if(r) setFxRates(r); setFxLoading(l); },[]);
+  const [rawTotale,setRawTotale]       = useState("100000");
+  const feCcy = useMemo(()=>(n)=>{
+    const sym = pfCcy==="USD"?"$":"€";
+    return sym+Number(n).toLocaleString("it-IT",{minimumFractionDigits:2,maximumFractionDigits:2});
+  },[pfCcy]);
+  const conv = useCallback((amount,bondCcy)=>
+    convertToBase(amount,bondCcy||"EUR",fxRates,pfCcy)
+  ,[fxRates,pfCcy]); // stringa per input controllato
   const [activeTab,setActiveTab]       = useState("overview");
   const [showAddForm,setShowAddForm]   = useState(false);
   const [addForm,setAddForm]           = useState(EMPTY_BOND);
@@ -1754,9 +1773,9 @@ export default function App() {
     const wtdYtm      = wt(b=>b.yldYtm);
     const wtdCedola   = wt(b=>b.cedola);
     const wtdDuration = wt(b=>b.duration||0);
-    const totNominale  = bonds.reduce((s,b)=>s+calcNominale(b,totale),0);
-    const totEffettivo = bonds.reduce((s,b)=>s+calcEffettivo(b,totale),0);
-    const totCoupon    = bonds.reduce((s,b)=>s+calcCouponAnnuo(b,totale),0);
+    const totNominale  = bonds.reduce((s,b)=>s+convertToBase(calcNominale(b,totale),  b.valuta||"EUR",fxRates,pfCcy),0);
+    const totEffettivo = bonds.reduce((s,b)=>s+convertToBase(calcEffettivo(b,totale), b.valuta||"EUR",fxRates,pfCcy),0);
+    const totCoupon    = bonds.reduce((s,b)=>s+convertToBase(calcCouponAnnuo(b,totale),b.valuta||"EUR",fxRates,pfCcy),0);
     const totPeso      = bonds.reduce((s,b)=>s+b.peso,0)||1;
     const wtdRatingNum = bonds.reduce((s,b)=>s+ratingToNum(b.rating)*b.peso,0)/totPeso;
     const wtdRating    = numToRating(wtdRatingNum);
@@ -1969,8 +1988,19 @@ export default function App() {
             <span style={{color:C.yellow,fontSize:14,fontWeight:900}}>⬡</span>
             <span style={{color:"#fff",fontWeight:800,fontSize:13,letterSpacing:"-.2px"}}>BondAnalyst</span>
           </div>
-          <FxRates/>
+          <FxRates rates={fxRates} loading={fxLoading} onRatesFetched={onRatesFetched}/>
           <div style={{display:"flex",gap:7,alignItems:"center",flexShrink:0,flexWrap:"wrap"}}>
+            <div style={{display:"flex",border:"1px solid #e5e7eb",borderRadius:8,overflow:"hidden",flexShrink:0}}>
+              {["EUR","USD"].map(ccy=>(
+                <button key={ccy} onClick={()=>setPfCcy(ccy)}
+                  style={{padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer",
+                    border:"none",transition:"all 0.15s",
+                    background:pfCcy===ccy?"#1a1a1a":"#fff",
+                    color:pfCcy===ccy?"#f5c842":"#6b7280"}}>
+                  {ccy==="EUR"?"€ EUR":"$ USD"}
+                </button>
+              ))}
+            </div>
             <input ref={fileRef} type="file" accept=".csv" style={{display:"none"}} onChange={onCSV}/>
             <Btn sm onClick={()=>fileRef.current.click()}>⬆ CSV</Btn>
             <Btn sm onClick={downloadCSVTemplate}>⬇ Template</Btn>
@@ -2012,7 +2042,7 @@ export default function App() {
                 <div style={{flex:1}}>
                   <p style={{fontSize:10,color:C.gray,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:4}}>Nominale Portafoglio</p>
                   <div style={{display:"flex",alignItems:"baseline",gap:4}}>
-                    <span style={{color:C.gray,fontWeight:600}}>€</span>
+                    <span style={{color:C.gray,fontWeight:600}}>{pfCcy==="USD"?"$":"€"}</span>
                     <input
                       value={rawTotale}
                       onChange={e=>{
@@ -2037,11 +2067,11 @@ export default function App() {
             {/* KPI importi */}
             <div className="ba-grid-3" style={{marginBottom:14}}>
               {[
-                {icon:"🏦",l:"Nominale Portafoglio",v:fe(stats.totNominale),    s:"Valore facciale (input)",             vc:C.blue, bg:C.blueL},
-                {icon:"💰",l:"Esborso Effettivo",   v:fe(stats.totEffettivo),   s:"Esborso al dirty price (output)",    vc:C.green,bg:C.greenL},
+                {icon:"🏦",l:"Nominale Portafoglio",v:feCcy(stats.totNominale),    s:"Valore facciale (input)",             vc:C.blue, bg:C.blueL},
+                {icon:"💰",l:"Esborso Effettivo",   v:feCcy(stats.totEffettivo),   s:"Esborso al dirty price (output)",    vc:C.green,bg:C.greenL},
                 {icon:stats.disaggio>=0?"📈":"📉",
                  l:stats.disaggio>=0?"Disaggio (sotto pari)":"Premio (sopra pari)",
-                 v:fe(Math.abs(stats.disaggio)),
+                 v:feCcy(Math.abs(stats.disaggio)),
                  s:stats.disaggio>0?"Gain atteso a maturity":stats.disaggio<0?"Costo aggiuntivo vs par":"Alla pari",
                  vc:stats.disaggio>=0?C.green:C.red,bg:C.card},
               ].map((k,i)=>(
@@ -2063,7 +2093,7 @@ export default function App() {
                 {l:"Cedola Media",   v:fp(stats.wtdCedola),                    s:"Tasso cedolare medio",   y:false},
                 {l:"Duration Media", v:`${stats.wtdDuration.toFixed(2)} anni`, s:"Sensitività al tasso",   y:false},
                 {l:"Rating Medio",   v:stats.wtdRating,                        s:`Score: ${stats.wtdRatingNum.toFixed(1)}`, y:false, r:true},
-                {l:"Cedola Annua",   v:fe(stats.totCoupon),                    s:"Cash flow sul nominale", y:true},
+                {l:"Cedola Annua",   v:feCcy(stats.totCoupon),                 s:"Cash flow sul nominale", y:true},
               ].map((k,i)=>{
                 const rc=k.r?(RATING_COLORS[stats.wtdRating]||C.blue):null;
                 return(
@@ -2139,7 +2169,7 @@ export default function App() {
                 ))}
               </div>
               <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                <span style={{fontSize:12,color:C.gray}}>Nom: <b style={{color:C.green}}>{fe(stats.totNominale)}</b> · Esb: <b style={{color:C.blue}}>{fe(stats.totEffettivo)}</b></span>
+                <span style={{fontSize:12,color:C.gray}}>Nom: <b style={{color:C.green}}>{feCcy(stats.totNominale)}</b> · Esb: <b style={{color:C.blue}}>{feCcy(stats.totEffettivo)}</b></span>
                 <Btn primary sm onClick={()=>setShowAddForm(v=>!v)}>+ Aggiungi</Btn>
               </div>
             </div>
@@ -2185,9 +2215,9 @@ export default function App() {
                         {col:null,       label:"Freq",     sort:false, w:62},
                         {col:"rating",   label:"Rating",   sort:true,  w:62},
                         {col:"peso",     label:"Peso%",    sort:true,  w:72},
-                        {col:"nominale", label:"Nom.€",    sort:true,  w:100},
-                        {col:"effettivo",label:"Esb.€",    sort:true,  w:100, italic:true},
-                        {col:"cedAnnua", label:"Ced.€",    sort:true,  w:90,  italic:true},
+                        {col:"nominale", label:pfCcy==="USD"?"Nom.$":"Nom.€", sort:true, w:100},
+                        {col:"effettivo",label:pfCcy==="USD"?"Esb.$":"Esb.€", sort:true, w:100, italic:true},
+                        {col:"cedAnnua", label:pfCcy==="USD"?"Ced.$":"Ced.€", sort:true, w:90, italic:true},
                         {col:null,       label:"",         sort:false, w:40},
                       ].map(({col,label,sort,w,italic})=>{
                         const active = sortCol===col;
@@ -2318,6 +2348,7 @@ export default function App() {
                           {/* Nominale — step=incrMin per frecce browser, warning se fuori taglio */}
                           {(()=>{
                             const nom = calcNominale(b,totale);
+                            const nomDisp = convertToBase(nom, b.valuta||"EUR", fxRates, pfCcy);
                             const tm  = Math.max(b.taglioMin > 0 ? b.taglioMin : 1000, 1000); // min ≥ 1000
                             const im  = b.incrMin   > 0 ? b.incrMin   : 1;
                             const chk = checkNominale(Math.round(nom), tm, im);
@@ -2366,9 +2397,9 @@ export default function App() {
                       <tr style={{background:C.yellowL,borderTop:`2px solid ${C.yellow}`}}>
                         <td colSpan={19} style={{padding:"10px 11px",color:"#78350f",fontWeight:800,fontSize:12}}>TOTALE</td>
                         <td style={{padding:"10px 11px",textAlign:"right",fontWeight:800}}>{totalePeso.toFixed(4)}%</td>
-                        <td style={{padding:"10px 11px",textAlign:"right",color:C.green,fontWeight:800,fontFamily:"monospace"}}>{fe(stats.totNominale)}</td>
-                        <td style={{padding:"10px 11px",textAlign:"right",color:C.blue,fontWeight:800,fontFamily:"monospace"}}>{fe(stats.totEffettivo)}</td>
-                        <td style={{padding:"10px 11px",textAlign:"right",color:"#d97706",fontWeight:800,fontFamily:"monospace"}}>{fe(stats.totCoupon)}</td>
+                        <td style={{padding:"10px 11px",textAlign:"right",color:C.green,fontWeight:800,fontFamily:"monospace"}}>{feCcy(stats.totNominale)}</td>
+                        <td style={{padding:"10px 11px",textAlign:"right",color:C.blue,fontWeight:800,fontFamily:"monospace"}}>{feCcy(stats.totEffettivo)}</td>
+                        <td style={{padding:"10px 11px",textAlign:"right",color:"#d97706",fontWeight:800,fontFamily:"monospace"}}>{feCcy(stats.totCoupon)}</td>
                         <td/>
                       </tr>
                     </tfoot>
@@ -2535,7 +2566,7 @@ export default function App() {
                           <td style={{...TD,padding:"7px 8px",whiteSpace:"nowrap"}}><Pill bg={`${RATING_COLORS[b.rating]||C.blue}22`} color={RATING_COLORS[b.rating]||C.blue} border={`${RATING_COLORS[b.rating]||C.blue}44`}>{b.rating}</Pill></td>
                           <td style={{...TD,textAlign:"right",fontWeight:600,whiteSpace:"nowrap"}}>{b.peso.toFixed(2)}%</td>
                           <td style={{...TD,textAlign:"right",color:C.green,fontFamily:"monospace",fontWeight:600,whiteSpace:"nowrap"}}>{fe(calcNominale(b,totale))}</td>
-                          <td style={{...TD,textAlign:"right",color:C.blue,fontFamily:"monospace",fontWeight:600,whiteSpace:"nowrap"}}>{fe(calcEsborso(b,totale))}</td>
+                          <td style={{...TD,textAlign:"right",color:C.blue,fontFamily:"monospace",fontWeight:600,whiteSpace:"nowrap"}}>{feCcy(convertToBase(calcEsborso(b,totale),b.valuta||"EUR",fxRates,pfCcy))}</td>
                           <td style={{...TD,textAlign:"right",fontWeight:700,whiteSpace:"nowrap",color:cy<b.cedola?C.red:cy>b.cedola?C.green:C.dark}}>{cy.toFixed(3)}%</td>
                           <td style={{...TD,textAlign:"right",fontWeight:700,color:C.green,whiteSpace:"nowrap"}}>{b.yldYtm.toFixed(3)}%</td>
                           <td style={{...TD,textAlign:"right",whiteSpace:"nowrap",color:b.yldToCall?"#d97706":C.border}}>{b.yldToCall?`${Number(b.yldToCall).toFixed(3)}%`:"—"}</td>
@@ -2599,10 +2630,10 @@ export default function App() {
                   ["CY Media Pond.",  fp(bonds.reduce((s,b)=>s+calcCurrentYield(b)*b.peso/100,0)), "#d97706"],
                   ["Cedola Media",    fp(stats.wtdCedola),             C.dark],
                   ["Duration Pond.",  `${stats.wtdDuration.toFixed(2)} anni`, C.dark],
-                  ["Nominale Totale", fe(stats.totNominale),           C.blue],
-                  ["Esborso Totale",  fe(stats.totEffettivo),          C.green],
-                  ["Disaggio/Premio", (stats.disaggio>=0?"+":"")+fe(stats.disaggio), stats.disaggio>=0?C.green:C.red],
-                  ["Cedola Annua",    fe(stats.totCoupon),             "#d97706"],
+                  ["Nominale Totale", feCcy(stats.totNominale),           C.blue],
+                  ["Esborso Totale",  feCcy(stats.totEffettivo),          C.green],
+                  ["Disaggio/Premio", (stats.disaggio>=0?"+":"")+feCcy(stats.disaggio), stats.disaggio>=0?C.green:C.red],
+                  ["Cedola Annua",    feCcy(stats.totCoupon),             "#d97706"],
                   ["N° Titoli",       String(bonds.length),            C.dark],
                   ["YTM Min",         fp(bonds.length?Math.min(...bonds.map(b=>b.yldYtm)):0), C.dark],
                   ["YTM Max",         fp(bonds.length?Math.max(...bonds.map(b=>b.yldYtm)):0), C.dark],
