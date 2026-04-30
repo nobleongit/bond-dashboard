@@ -1138,19 +1138,44 @@ function FxRates() {
 
   const fetchRates = useCallback(async () => {
     setLoading(true); setErr(false);
-    try {
-      const r = await fetch(
-        `https://api.frankfurter.app/latest?from=EUR&to=${PAIRS.join(",")}`
-      );
-      if(!r.ok) throw new Error("HTTP " + r.status);
-      const d = await r.json();
-      setRates(d.rates);
-      setTs(new Date().toLocaleTimeString("it-IT", {hour:"2-digit",minute:"2-digit"}));
-    } catch(e) {
-      setErr(true);
-    } finally {
-      setLoading(false);
+    // Provider in ordine di priorità — tutti gratuiti, no API key
+    // open.er-api.com: CORS aperto (funziona in localhost e produzione)
+    // frankfurter.app: fonte BCE (funziona in produzione, CORS restrittivo in locale)
+    const PROVIDERS = [
+      {
+        url: "https://open.er-api.com/v6/latest/EUR",
+        parse: (d) => {
+          // Filtra solo le coppie che ci interessano
+          const out = {};
+          PAIRS.forEach(p => { if(d.rates[p]) out[p] = d.rates[p]; });
+          return out;
+        }
+      },
+      {
+        url: `https://api.frankfurter.app/latest?from=EUR&to=${PAIRS.join(",")}`,
+        parse: (d) => d.rates
+      },
+    ];
+
+    for(const provider of PROVIDERS) {
+      try {
+        const r = await fetch(provider.url);
+        if(!r.ok) continue;
+        const d = await r.json();
+        const parsed = provider.parse(d);
+        if(Object.keys(parsed).length === 0) continue;
+        setRates(parsed);
+        setTs(new Date().toLocaleTimeString("it-IT", {hour:"2-digit",minute:"2-digit"}));
+        setErr(false);
+        setLoading(false);
+        return; // successo — fermati qui
+      } catch(e) {
+        continue; // prova provider successivo
+      }
     }
+    // Tutti i provider falliti
+    setErr(true);
+    setLoading(false);
   }, []);
 
   // Carica al mount
@@ -1248,7 +1273,7 @@ function FxRates() {
           {/* Footer */}
           <div style={{marginTop:12,paddingTop:8,borderTop:"1px solid #2a2a2a"}}>
             <p style={{fontSize:8,color:"#4b5563",margin:0,textAlign:"center"}}>
-              api.frankfurter.app · Banca Centrale Europea
+              open.er-api.com · exchangerate-api.com
             </p>
           </div>
         </div>
@@ -1808,8 +1833,12 @@ export default function App() {
   },[bonds,tipoFilter,sortCol,sortDir,totale]);
 
   const toggleSort = (col) => {
-    if(sortCol===col) setSortDir(d=>d==="asc"?"desc":"asc");
-    else { setSortCol(col); setSortDir("asc"); }
+    if(sortCol===col) {
+      if(sortDir==="asc")  { setSortDir("desc"); }          // 1°→2° click: desc
+      else                 { setSortCol(null); setSortDir("asc"); } // 3° click: reset
+    } else {
+      setSortCol(col); setSortDir("asc");                   // nuova colonna: asc
+    }
   };
 
   // ── Handlers ───────────────────────────────────────────────────────────────
@@ -2163,8 +2192,10 @@ export default function App() {
                       ].map(({col,label,sort,w,italic})=>{
                         const active = sortCol===col;
                         const arrow  = active ? (sortDir==="asc"?"↑":"↓") : "";
+                        const hint   = active ? (sortDir==="asc"?"Clicca per ordinare ↓":"Clicca per rimuovere ordinamento") : "Clicca per ordinare ↑";
                         return(
                           <th key={label} onClick={sort&&col?()=>toggleSort(col):undefined}
+                            title={sort&&col?hint:undefined}
                             style={{...TH,
                               // w:null = larghezza automatica dal contenuto
                               // w:number = minWidth fisso per colonne numeriche
