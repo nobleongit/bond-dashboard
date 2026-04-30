@@ -211,7 +211,7 @@ const convertToBase = (amount, bondCcy, rates, pfCcy) => {
   if(b === p) return amount;
   if(b === "EUR" && p !== "EUR") return amount * (rates[p] || 1);
   if(p === "EUR" && b !== "EUR") return amount / (rates[b] || 1);
-  return (amount / (rates[b] || 1)) * (rates[p] || 1); // cross via EUR
+  return (amount / (rates[b] || 1)) * (rates[p] || 1);
 };
 
 // Converte YYYY-MM-DD → DD/MM/YYYY per la visualizzazione (convenzione europea)
@@ -1138,14 +1138,16 @@ ${(()=>{
 
 // ─── FX RATES — tassi di cambio in tempo reale (Frankfurter / BCE) ──────────
 // API: https://api.frankfurter.app — fonte BCE, open source, zero registrazione
-function FxRates({ rates, loading, onRatesFetched }) {
+function FxRates({ onRates }) {
   const PAIRS = ["USD","GBP","CHF","JPY","CNY"];
-  const [ts,   setTs]  = useState(null);
-  const [err,  setErr] = useState(false);
-  const [open, setOpen]= useState(false);
+  const [rates,   setRates]   = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [ts,      setTs]      = useState(null);
+  const [err,     setErr]     = useState(false);
+  const [open,    setOpen]    = useState(false);
 
   const fetchRates = useCallback(async () => {
-    onRatesFetched(null, true, false);
+    setLoading(true);
     setErr(false);
     // Provider in ordine di priorità — tutti gratuiti, no API key
     // open.er-api.com: CORS aperto (funziona in localhost e produzione)
@@ -1173,7 +1175,9 @@ function FxRates({ rates, loading, onRatesFetched }) {
         const d = await r.json();
         const parsed = provider.parse(d);
         if(Object.keys(parsed).length === 0) continue;
-        onRatesFetched(parsed, false, false);
+        setRates(parsed);
+        setLoading(false);
+        onRates(parsed);  // propaga a App
         setTs(new Date().toLocaleTimeString("it-IT", {hour:"2-digit",minute:"2-digit"}));
         setErr(false);
         return;
@@ -1182,9 +1186,9 @@ function FxRates({ rates, loading, onRatesFetched }) {
       }
     }
     // Tutti i provider falliti
-    onRatesFetched(null, false, true);
+    setLoading(false);
     setErr(true);
-  }, [onRatesFetched]);
+  }, [onRates]);
 
   // Carica al mount
   useEffect(() => { fetchRates(); }, [fetchRates]);
@@ -1744,8 +1748,7 @@ export default function App() {
   const [totale,setTotale]             = useState(100000);
   const [pfCcy,setPfCcy]               = useState("EUR");
   const [fxRates,setFxRates]           = useState(null);
-  const [fxLoading,setFxLoading]       = useState(false);
-  const onRatesFetched = useCallback((r,l)=>{ if(r) setFxRates(r); setFxLoading(l); },[]);
+  const onFxRates = useCallback((r)=>{ setFxRates(r); },[]);
   const [rawTotale,setRawTotale]       = useState("100000");
   const feCcy = useMemo(()=>(n)=>{
     const sym = pfCcy==="USD"?"$":"€";
@@ -1988,16 +1991,21 @@ export default function App() {
             <span style={{color:C.yellow,fontSize:14,fontWeight:900}}>⬡</span>
             <span style={{color:"#fff",fontWeight:800,fontSize:13,letterSpacing:"-.2px"}}>BondAnalyst</span>
           </div>
-          <FxRates rates={fxRates} loading={fxLoading} onRatesFetched={onRatesFetched}/>
+          <FxRates onRates={onFxRates}/>
           <div style={{display:"flex",gap:7,alignItems:"center",flexShrink:0,flexWrap:"wrap"}}>
-            <div style={{display:"flex",border:"1px solid #e5e7eb",borderRadius:8,overflow:"hidden",flexShrink:0}}>
+            <div style={{display:"flex",border:"1px solid #e5e7eb",borderRadius:8,overflow:"hidden",flexShrink:0}}
+              title={!fxRates?"Tassi di cambio non ancora disponibili — seleziona prima € EUR":undefined}>
               {["EUR","USD"].map(ccy=>(
-                <button key={ccy} onClick={()=>setPfCcy(ccy)}
-                  style={{padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer",
+                <button key={ccy}
+                  onClick={()=>{ if(ccy==="USD"&&!fxRates) return; setPfCcy(ccy); }}
+                  style={{padding:"5px 10px",fontSize:11,fontWeight:700,
+                    cursor:ccy==="USD"&&!fxRates?"not-allowed":"pointer",
                     border:"none",transition:"all 0.15s",
+                    opacity:ccy==="USD"&&!fxRates?0.5:1,
                     background:pfCcy===ccy?"#1a1a1a":"#fff",
                     color:pfCcy===ccy?"#f5c842":"#6b7280"}}>
                   {ccy==="EUR"?"€ EUR":"$ USD"}
+                  {ccy!=="EUR"&&!fxRates&&<span style={{fontSize:9,marginLeft:2,color:"#f87171"}}>⏳</span>}
                 </button>
               ))}
             </div>
