@@ -1,4 +1,15 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from "react";
+
+// ─── SUPABASE CONFIG ──────────────────────────────────────────────────────────
+const SB_URL = "https://tqlioexfmkgmweulmqeb.supabase.co";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRxbGlvZXhmbWtnbXdldWxtcWViIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc4OTUzOTQsImV4cCI6MjA5MzQ3MTM5NH0.25r1Mc4ZjZaRULa3Tb6bEFNzM-eEfe5VOuxAzgjyokI";
+const sbFetch = async (path) => {
+  const r = await fetch(`${SB_URL}/rest/v1/${path}`, {
+    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }
+  });
+  if(!r.ok) throw new Error(`Supabase ${r.status}`);
+  return r.json();
+};
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from "recharts";
 
 // ─── GLOBAL RESPONSIVE CSS ────────────────────────────────────────────────────
@@ -1294,6 +1305,211 @@ function FxRates({ onRates }) {
   );
 }
 
+// ─── UNIVERSO OBBLIGAZIONARIO — Supabase ─────────────────────────────────────
+function UniversoPanel({ onAdd, existingIsins }) {
+  const [query,    setQuery]    = useState("");
+  const [valuta,   setValuta]   = useState("Tutti");
+  const [rating,   setRating]   = useState("Tutti");
+  const [settore,  setSettore]  = useState("Tutti");
+  const [results,  setResults]  = useState([]);
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState(null);
+  const [searched, setSearched] = useState(false);
+
+  const search = useCallback(async () => {
+    setLoading(true); setError(null); setSearched(true);
+    try {
+      // Costruisci query Supabase
+      let qs = "bonds_universe?select=*&order=issuer.asc&limit=100";
+      if(valuta !== "Tutti") qs += `&valuta=eq.${valuta}`;
+      if(rating !== "Tutti") qs += `&rating=eq.${rating}`;
+      if(settore !== "Tutti") qs += `&sector=eq.${settore}`;
+      if(query.trim()) {
+        const q = query.trim().toUpperCase();
+        // PostgREST: cerca per ISIN esatto o testo nell'issuer
+        qs += `&or=(isin.ilike.*${q}*,issuer.ilike.*${q}*,name.ilike.*${q}*)`;
+      }
+      const data = await sbFetch(qs);
+      setResults(data);
+    } catch(e) {
+      setError("Errore connessione database: " + e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [query, valuta, rating, settore]);
+
+  // Converti un titolo dal formato Supabase al formato bond della dashboard
+  const toBond = (r) => ({
+    valuta:     r.valuta || "EUR",
+    issuer:     r.issuer || "",
+    isin:       r.isin,
+    name:       r.name || r.isin,
+    scadenza:   r.scadenza || "",
+    callDate:   r.call_date || "",
+    cedola:     r.cedola || 0,
+    ask:        r.ask || 100,
+    yldYtm:     r.yld_ytm || 0,
+    yldToCall:  r.yld_to_call || null,
+    duration:   r.duration || null,
+    taglioMin:  r.taglio_min || 1000,
+    incrMin:    r.incr_min || 1,
+    rating:     r.rating || "ND",
+    peso:       5,            // peso default, l'utente può modificarlo
+    tipo:       r.sector?.includes("Government") ? "Governativo" :
+                r.sector?.includes("Financial")  ? "Corporate"   : "Corporate",
+    seniority:  r.seniority || "Senior Unsecured",
+    tipoCedola: r.tipo_cedola || "Fixed",
+    couponFreq: r.coupon_freq || 1,
+    sector:     r.sector || "",
+    ammEmesso:  0,
+    rateo:      r.accrued || 0,
+  });
+
+  const RATINGS_LIST = ["Tutti","AAA","AA+","AA","AA-","A+","A","A-","BBB+","BBB","BBB-","BB+","BB","BB-","B+","B","ND"];
+  const VALUTE_LIST  = ["Tutti","EUR","USD","GBP","CHF"];
+  const SETTORI_LIST = ["Tutti","Government Activity","Financials","Utilities","Healthcare","Industrials","Consumer Cyclicals","Technology","Basic Materials"];
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      {/* Filtri di ricerca */}
+      <div style={{background:"#fff",border:"1px solid #e5e7eb",borderRadius:12,padding:"16px 18px"}}>
+        <p style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",color:"#9ca3af",marginBottom:12}}>
+          RICERCA NELL'UNIVERSO
+        </p>
+        <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr auto",gap:8,alignItems:"end"}}>
+          {/* Testo libero */}
+          <div>
+            <p style={{fontSize:10,color:"#6b7280",marginBottom:4,fontWeight:600}}>ISIN / Emittente / Nome</p>
+            <input value={query} onChange={e=>setQuery(e.target.value)}
+              onKeyDown={e=>e.key==="Enter"&&search()}
+              placeholder="es. IT0005619546 oppure ITALY..."
+              style={{width:"100%",border:"1px solid #e5e7eb",borderRadius:8,padding:"8px 10px",
+                fontSize:12,outline:"none",boxSizing:"border-box"}}/>
+          </div>
+          {/* Valuta */}
+          <div>
+            <p style={{fontSize:10,color:"#6b7280",marginBottom:4,fontWeight:600}}>VALUTA</p>
+            <select value={valuta} onChange={e=>setValuta(e.target.value)}
+              style={{width:"100%",border:"1px solid #e5e7eb",borderRadius:8,padding:"8px 10px",fontSize:12,outline:"none"}}>
+              {VALUTE_LIST.map(v=><option key={v}>{v}</option>)}
+            </select>
+          </div>
+          {/* Rating */}
+          <div>
+            <p style={{fontSize:10,color:"#6b7280",marginBottom:4,fontWeight:600}}>RATING</p>
+            <select value={rating} onChange={e=>setRating(e.target.value)}
+              style={{width:"100%",border:"1px solid #e5e7eb",borderRadius:8,padding:"8px 10px",fontSize:12,outline:"none"}}>
+              {RATINGS_LIST.map(r=><option key={r}>{r}</option>)}
+            </select>
+          </div>
+          {/* Settore */}
+          <div>
+            <p style={{fontSize:10,color:"#6b7280",marginBottom:4,fontWeight:600}}>SETTORE</p>
+            <select value={settore} onChange={e=>setSettore(e.target.value)}
+              style={{width:"100%",border:"1px solid #e5e7eb",borderRadius:8,padding:"8px 10px",fontSize:12,outline:"none"}}>
+              {SETTORI_LIST.map(s=><option key={s} value={s}>{s==="Tutti"?"Tutti i settori":s}</option>)}
+            </select>
+          </div>
+          {/* Cerca */}
+          <button onClick={search} disabled={loading}
+            style={{padding:"8px 20px",background:"#1a1a1a",color:"#f5c842",border:"none",
+              borderRadius:8,fontWeight:700,fontSize:13,cursor:loading?"wait":"pointer",
+              whiteSpace:"nowrap",opacity:loading?0.7:1}}>
+            {loading ? "..." : "🔍 Cerca"}
+          </button>
+        </div>
+      </div>
+
+      {/* Risultati */}
+      {error && (
+        <div style={{background:"#fef2f2",border:"1px solid #fecaca",borderRadius:10,padding:"12px 16px",color:"#dc2626",fontSize:12}}>
+          ⚠ {error}
+        </div>
+      )}
+
+      {searched && !loading && !error && (
+        <div style={{background:"#fff",border:"1px solid #e5e7eb",borderRadius:12,overflow:"hidden"}}>
+          <div style={{padding:"10px 18px",borderBottom:"1px solid #f3f4f6",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <p style={{fontSize:11,color:"#6b7280",fontWeight:600}}>
+              {results.length === 0 ? "Nessun risultato" : `${results.length} titoli trovati`}
+            </p>
+            {results.length > 0 && (
+              <p style={{fontSize:10,color:"#9ca3af"}}>Peso default 5% — modificabile dopo l'aggiunta</p>
+            )}
+          </div>
+          {results.length > 0 && (
+            <div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:11.5}}>
+                <thead>
+                  <tr style={{background:"#1a1a1a"}}>
+                    {["CCY","ISIN","Emittente","Scadenza","Call","Rating","Ced%","Ask","YTM%","Settore",""].map(h=>(
+                      <th key={h} style={{color:"#9ca3af",padding:"8px 10px",fontSize:8,fontWeight:700,
+                        textTransform:"uppercase",textAlign:h===""?"center":"left",whiteSpace:"nowrap"}}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {results.map((r,i)=>{
+                    const already = existingIsins.has(r.isin);
+                    return(
+                      <tr key={r.isin} style={{background:i%2===0?"#fafafa":"#fff",
+                        borderBottom:"1px solid #f3f4f6",
+                        opacity:already?0.5:1}}>
+                        <td style={{padding:"7px 10px",fontWeight:700,color:r.valuta==="USD"?"#22c55e":r.valuta==="GBP"?"#8b5cf6":"#3b82f6",fontSize:11}}>{r.valuta}</td>
+                        <td style={{padding:"7px 10px",fontFamily:"monospace",fontSize:10,color:"#6b7280"}}>{r.isin}</td>
+                        <td style={{padding:"7px 10px",fontWeight:600,whiteSpace:"nowrap",maxWidth:200,overflow:"hidden",textOverflow:"ellipsis"}}>{r.issuer}</td>
+                        <td style={{padding:"7px 10px",fontFamily:"monospace",fontSize:11}}>{r.scadenza}</td>
+                        <td style={{padding:"7px 10px",fontFamily:"monospace",fontSize:11,color:r.call_date?"#d97706":"#d1d5db"}}>{r.call_date||"—"}</td>
+                        <td style={{padding:"7px 10px"}}>
+                          <span style={{background:`${({"AAA":"#059669","AA+":"#10b981","AA":"#34d399","A+":"#3b82f6","A":"#60a5fa","BBB+":"#8b5cf6","BBB":"#a78bfa","BBB-":"#c4b5fd","BB+":"#ef4444","BB":"#f87171","ND":"#9ca3af"})[r.rating]||"#9ca3af"}22`,
+                            color:({"AAA":"#059669","AA+":"#10b981","AA":"#34d399","A+":"#3b82f6","A":"#60a5fa","BBB+":"#8b5cf6","BBB":"#a78bfa","BBB-":"#c4b5fd","BB+":"#ef4444","BB":"#f87171","ND":"#9ca3af"})[r.rating]||"#9ca3af",
+                            padding:"2px 8px",borderRadius:20,fontWeight:700,fontSize:10,whiteSpace:"nowrap"}}>
+                            {r.rating}
+                          </span>
+                        </td>
+                        <td style={{padding:"7px 10px",textAlign:"right",fontFamily:"monospace"}}>{r.cedola?.toFixed(3)}%</td>
+                        <td style={{padding:"7px 10px",textAlign:"right",fontFamily:"monospace",
+                          color:r.ask>100?"#dc2626":r.ask<100?"#15803d":"#374151"}}>
+                          {r.ask?.toFixed(3)||"—"}
+                        </td>
+                        <td style={{padding:"7px 10px",textAlign:"right",fontFamily:"monospace",color:"#15803d",fontWeight:600}}>
+                          {r.yld_ytm?.toFixed(3)||"—"}%
+                        </td>
+                        <td style={{padding:"7px 10px",fontSize:10,color:"#6b7280",whiteSpace:"nowrap"}}>{r.sector}</td>
+                        <td style={{padding:"7px 10px",textAlign:"center"}}>
+                          {already ? (
+                            <span style={{fontSize:10,color:"#9ca3af",fontStyle:"italic"}}>già presente</span>
+                          ) : (
+                            <button onClick={()=>onAdd(toBond(r))}
+                              style={{background:"#f0fdf4",color:"#15803d",border:"1px solid #bbf7d0",
+                                borderRadius:6,padding:"4px 12px",cursor:"pointer",fontSize:11,fontWeight:700,
+                                whiteSpace:"nowrap"}}>
+                              + Aggiungi
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {!searched && (
+        <div style={{background:"#f9fafb",border:"1px solid #e5e7eb",borderRadius:12,padding:"32px",
+          textAlign:"center",color:"#9ca3af"}}>
+          <p style={{fontSize:24,marginBottom:8}}>🔍</p>
+          <p style={{fontSize:13,fontWeight:600}}>Cerca nell'universo obbligazionario</p>
+          <p style={{fontSize:11,marginTop:4}}>Usa i filtri sopra per trovare titoli da aggiungere al portafoglio</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── CASH FLOW PLURIENNALE ───────────────────────────────────────────────────
 function CashFlowPluriennale({ bonds, totale, fxRates, pfCcy }) {
   const [viewMode, setViewMode] = useState("chart");
@@ -1763,7 +1979,9 @@ export default function App() {
   const conv = useCallback((amount,bondCcy)=>
     convertToBase(amount,bondCcy||"EUR",fxRates,pfCcy)
   ,[fxRates,pfCcy]); // stringa per input controllato
-  const [activeTab,setActiveTab]       = useState("overview");
+  const [activePage,setActivePage]      = useState("portfolio");
+  const [univMsg,setUnivMsg]            = useState(null);
+  const [activeTab,setActiveTab]        = useState("overview");
   const [showAddForm,setShowAddForm]   = useState(false);
   const [addForm,setAddForm]           = useState(EMPTY_BOND);
   const [csvMsg,setCsvMsg]             = useState(null);
@@ -2002,9 +2220,19 @@ export default function App() {
       <nav style={{background:C.card,borderBottom:`1px solid ${C.border}`,position:"sticky",top:0,zIndex:100,boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
         {/* Riga brand + azioni */}
         <div style={{maxWidth:1600,margin:"0 auto",padding:"0 20px",display:"flex",alignItems:"center",justifyContent:"space-between",height:52,gap:10}}>
-          <div style={{background:C.dark,borderRadius:9,padding:"5px 12px",display:"flex",alignItems:"center",gap:7,flexShrink:0}}>
-            <span style={{color:C.yellow,fontSize:14,fontWeight:900}}>⬡</span>
-            <span style={{color:"#fff",fontWeight:800,fontSize:13,letterSpacing:"-.2px"}}>BondAnalyst</span>
+          <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+            <span style={{color:C.yellow,fontSize:16,fontWeight:900}}>⬡</span>
+            <div style={{display:"flex",borderRadius:9,overflow:"hidden",border:"1px solid #3a3a3a"}}>
+              {[["portfolio","Bond Portfolio"],["universe","Bond Universe"]].map(([id,label])=>(
+                <button key={id} onClick={()=>setActivePage(id)}
+                  style={{padding:"5px 13px",fontSize:12,fontWeight:700,cursor:"pointer",
+                    border:"none",whiteSpace:"nowrap",transition:"all 0.15s",
+                    background:activePage===id?"#f5c842":"#2a2a2a",
+                    color:activePage===id?"#1a1a1a":"#9ca3af"}}>
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
           <FxRates onRates={onFxRates}/>
           <div style={{display:"flex",gap:7,alignItems:"center",flexShrink:0,flexWrap:"wrap"}}>
@@ -2031,14 +2259,16 @@ export default function App() {
             <Btn primary sm onClick={()=>openReport(bonds,totale,stats,monthlyData)}>📄 Report</Btn>
           </div>
         </div>
-        {/* Tabs — scrollabili su schermi stretti */}
-        <div style={{borderTop:`1px solid ${C.border}`,overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none"}}>
-          <div style={{display:"flex",gap:0,padding:"0 16px",minWidth:"max-content"}}>
-            {[["overview","Panoramica"],["bonds","Titoli"],["cedole","Cedole"],["scadenze","Scadenze"],["flussi","Flussi"],["composizione","Composizione"]].map(([id,l])=>(
-              <TabBtn key={id} id={id} label={l}/>
-            ))}
+        {/* Tabs — visibili solo in Bond Portfolio */}
+        {activePage==="portfolio"&&(
+          <div style={{borderTop:`1px solid ${C.border}`,overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none"}}>
+            <div style={{display:"flex",gap:0,padding:"0 16px",minWidth:"max-content"}}>
+              {[["overview","Panoramica"],["bonds","Titoli"],["cedole","Cedole"],["scadenze","Scadenze"],["flussi","Flussi"],["composizione","Composizione"]].map(([id,l])=>(
+                <TabBtn key={id} id={id} label={l}/>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </nav>
 
       {csvMsg&&(
@@ -2051,6 +2281,46 @@ export default function App() {
       )}
 
       <div className="ba-inner">
+
+        {/* ═══ BOND UNIVERSE PAGE ════════════════════════════════════════ */}
+        {activePage==="universe"&&(
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+              marginBottom:22,flexWrap:"wrap",gap:12}}>
+              <div>
+                <h2 style={{fontSize:24,fontWeight:800,margin:0}}>Bond Universe</h2>
+                <p style={{fontSize:12,color:"#9ca3af",marginTop:4}}>
+                  Cerca nell'universo e aggiungi titoli al portafoglio corrente
+                </p>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                {univMsg&&(
+                  <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,
+                    padding:"7px 14px",fontSize:12,color:"#15803d",fontWeight:600}}>
+                    {univMsg}
+                  </div>
+                )}
+                <div style={{fontSize:11,color:"#6b7280",background:"#f9fafb",
+                  border:"1px solid #e5e7eb",borderRadius:8,padding:"6px 12px",
+                  display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{width:8,height:8,borderRadius:"50%",background:"#22c55e",display:"inline-block"}}/>
+                  Database connesso
+                </div>
+              </div>
+            </div>
+            <UniversoPanel
+              onAdd={b=>{
+                setBonds(prev=>[...prev,{...b}]);
+                setUnivMsg(`✓ "${b.issuer}" aggiunto al portafoglio`);
+                setTimeout(()=>setUnivMsg(null),3000);
+              }}
+              existingIsins={new Set(bonds.map(b=>b.isin))}
+            />
+          </div>
+        )}
+
+        {/* ═══ BOND PORTFOLIO ═════════════════════════════════════════════ */}
+        {activePage==="portfolio"&&<>
 
         {/* ═══════════════ PANORAMICA ══════════════════════════════════════ */}
         {activeTab==="overview"&&(
@@ -2172,6 +2442,34 @@ export default function App() {
             {/* ── SCENARIO TASSI ─────────────────────────────────────────── */}
             <ScenarioRates bonds={bonds} totale={totale} stats={stats}/>
 
+          </div>
+        )}
+
+        {/* ═══════════════ UNIVERSO ══════════════════════════════════════════ */}
+        {activeTab==="universo"&&(
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:12}}>
+              <div>
+                <h2 style={{fontSize:22,fontWeight:800,margin:0}}>Universo Obbligazionario</h2>
+                <p style={{fontSize:12,color:"#9ca3af",marginTop:4}}>
+                  Cerca e aggiungi titoli al portafoglio · Database aggiornato centralmente
+                </p>
+              </div>
+              <div style={{fontSize:11,color:"#6b7280",background:"#f9fafb",border:"1px solid #e5e7eb",
+                borderRadius:8,padding:"6px 12px",display:"flex",alignItems:"center",gap:6}}>
+                <span style={{width:8,height:8,borderRadius:"50%",background:"#22c55e",display:"inline-block"}}/>
+                Connesso al database
+              </div>
+            </div>
+            <UniversoPanel
+              onAdd={b=>{
+                setBonds(prev=>[...prev,{...b}]);
+                // Feedback visivo
+                setCsvMsg({ok:true,text:`✓ "${b.issuer}" aggiunto al portafoglio con peso ${b.peso}%.`});
+                setTimeout(()=>setCsvMsg(null),3000);
+              }}
+              existingIsins={useMemo(()=>new Set(bonds.map(b=>b.isin)),[bonds])}
+            />
           </div>
         )}
 
@@ -2671,6 +2969,7 @@ export default function App() {
             </div>
           </div>
         )}
+      </>}
       </div>
     </div>
   );
