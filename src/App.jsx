@@ -1778,19 +1778,28 @@ export default function App() {
   const totalePeso = useMemo(()=>bonds.reduce((s,b)=>s+b.peso,0),[bonds]);
 
   const stats = useMemo(()=>{
-    const wt       = (f)=>bonds.reduce((s,b)=>s+f(b)*b.peso/100,0);
+    // YTM, Duration, Cedola media: pesate per b.peso (definito dall'utente, somma 100%)
+    // Il tasso di cambio NON influisce su queste medie — sono indicatori di rendimento
+    const wt          = (f) => bonds.reduce((s,b)=>s+f(b)*b.peso/100, 0);
     const wtdYtm      = wt(b=>b.yldYtm);
     const wtdCedola   = wt(b=>b.cedola);
     const wtdDuration = wt(b=>b.duration||0);
-    const totNominale  = bonds.reduce((s,b)=>s+convertToBase(calcNominale(b,totale),  b.valuta||"EUR",fxRates,pfCcy),0);
-    const totEffettivo = bonds.reduce((s,b)=>s+convertToBase(calcEffettivo(b,totale), b.valuta||"EUR",fxRates,pfCcy),0);
+    // Nominale: peso% × totale, nella valuta del bond — NON convertito
+    // Es: 50% su €100.000 → €50.000 EUR per bond EUR, $50.000 USD per bond USD
+    const totNominale  = bonds.reduce((s,b)=>s+calcNominale(b,totale),0);
+    // Esborso: nominale × dirty price, poi convertito in pfCcy per aggregazione
+    const totEffettivo = bonds.reduce((s,b)=>s+convertToBase(calcEffettivo(b,totale),  b.valuta||"EUR",fxRates,pfCcy),0);
+    // Cedola annua: calcolata sul nominale in valuta bond, poi convertita in pfCcy
     const totCoupon    = bonds.reduce((s,b)=>s+convertToBase(calcCouponAnnuo(b,totale),b.valuta||"EUR",fxRates,pfCcy),0);
     const totPeso      = bonds.reduce((s,b)=>s+b.peso,0)||1;
     const wtdRatingNum = bonds.reduce((s,b)=>s+ratingToNum(b.rating)*b.peso,0)/totPeso;
     const wtdRating    = numToRating(wtdRatingNum);
+    // Disaggio: nominale totale (in valuta bond) − esborso totale (in pfCcy)
+    // Nota: se ci sono bond in valuta diversa il disaggio è indicativo
+    const disaggio     = totNominale - totEffettivo;
     return {wtdYtm,wtdCedola,wtdDuration,totNominale,totEffettivo,totCoupon,
-            disaggio:totNominale-totEffettivo,wtdRating,wtdRatingNum};
-  },[bonds,totale]);
+            disaggio,wtdRating,wtdRatingNum};
+  },[bonds,totale,fxRates,pfCcy]);
 
   const monthlyData = useMemo(()=>MONTHS.map((m,mi)=>{
     let tot=0;
@@ -2081,7 +2090,7 @@ export default function App() {
             {/* KPI importi */}
             <div className="ba-grid-3" style={{marginBottom:14}}>
               {[
-                {icon:"🏦",l:"Nominale Portafoglio",v:feCcy(stats.totNominale),    s:"Valore facciale (input)",             vc:C.blue, bg:C.blueL},
+                {icon:"🏦",l:"Nominale Portafoglio",v:fe(stats.totNominale),        s:"Valore facciale (in valuta bond)",             vc:C.blue, bg:C.blueL},
                 {icon:"💰",l:"Esborso Effettivo",   v:feCcy(stats.totEffettivo),   s:"Esborso al dirty price (output)",    vc:C.green,bg:C.greenL},
                 {icon:stats.disaggio>=0?"📈":"📉",
                  l:stats.disaggio>=0?"Disaggio (sotto pari)":"Premio (sopra pari)",
@@ -2199,10 +2208,7 @@ export default function App() {
             <div style={{...card,background:C.yellowL,border:`1px solid ${C.yellowB}`,padding:"9px 16px",marginBottom:10,fontSize:11,color:"#92400e",display:"flex",gap:20,flexWrap:"wrap"}}>
               <span>✏️ Clicca su un campo per modificarlo.</span>
               <span><b>CY%</b> = Cedola%/(Ask/100) — rendimento cedolare effettivo.</span>
-              <span style={{fontStyle:"italic",color:C.gray}}>Esborso € e Ced.Ann.€ sono formule.</span>
-            </div>
-
-            <div style={{...card,padding:0,overflow:"hidden"}}>
+              <span style={{fontStyle:"italic`Nom. nella valuta del bond. Esb. e Ced. convertiti in ${pfCcy}.`hidden"}}>
               <div className="ba-table-wrap">
                 <table className="ba-table-bonds" style={{borderCollapse:"collapse",fontSize:11.5,width:"max-content",minWidth:"100%"}}>
                   <thead>
@@ -2229,14 +2235,17 @@ export default function App() {
                         {col:null,       label:"Freq",     sort:false, w:62},
                         {col:"rating",   label:"Rating",   sort:true,  w:62},
                         {col:"peso",     label:"Peso%",    sort:true,  w:72},
-                        {col:"nominale", label:pfCcy==="USD"?"Nom.$":"Nom.€", sort:true, w:100},
-                        {col:"effettivo",label:pfCcy==="USD"?"Esb.$":"Esb.€", sort:true, w:100, italic:true},
-                        {col:"cedAnnua", label:pfCcy==="USD"?"Ced.$":"Ced.€", sort:true, w:90, italic:true},
+                        {col:"nominale", label:"Nom. (ccy)", sort:true, w:100},
+                        {col:"effettivo",label:`Esb. (${pfCcy})`, sort:true, w:100, italic:true},
+                        {col:"cedAnnua", label:`Ced. (${pfCcy})`, sort:true, w:90, italic:true},
                         {col:null,       label:"",         sort:false, w:40},
                       ].map(({col,label,sort,w,italic})=>{
-                        const active = sortCol===col;
+                        // col:null = colonna non sortabile → mai attiva anche se sortCol=null
+                        const active = col !== null && sortCol === col;
                         const arrow  = active ? (sortDir==="asc"?"↑":"↓") : "";
-                        const hint   = active ? (sortDir==="asc"?"Clicca per ordinare ↓":"Clicca per rimuovere ordinamento") : "Clicca per ordinare ↑";
+                        const hint   = active
+                          ? (sortDir==="asc"?"Clicca per ordinare ↓":"Clicca per rimuovere ordinamento")
+                          : (col ? "Clicca per ordinare ↑" : undefined);
                         return(
                           <th key={label} onClick={sort&&col?()=>toggleSort(col):undefined}
                             title={sort&&col?hint:undefined}
@@ -2550,8 +2559,8 @@ export default function App() {
                         {h:"Call",     w:92,  align:"left"},
                         {h:"Rating",   w:62,  align:"left"},
                         {h:"Peso%",    w:65,  align:"right"},
-                        {h:"Nom.€",    w:90,  align:"right"},
-                        {h:"Esb.€",    w:90,  align:"right"},
+                        {h:"Nom. (ccy)", w:110, align:"right"},
+                        {h:`Esb. (${pfCcy})`, w:100, align:"right"},
                         {h:"CY%",      w:62,  align:"right", yellow:true},
                         {h:"YTM%",     w:62,  align:"right"},
                         {h:"YTC%",     w:62,  align:"right"},
