@@ -1332,7 +1332,9 @@ function UniversoPanel({ onAdd, existingIsins }) {
       const data = await sbFetch(qs);
       setResults(data);
     } catch(e) {
-      setError("Errore connessione database: " + e.message);
+      if(e.message.includes("404")) setError("Tabella non trovata. Importa il CSV su Supabase → Table Editor.");
+      else if(e.message.includes("401")||e.message.includes("403")) setError("Accesso negato. Aggiungi policy SELECT pubblica su Authentication → Policies.");
+      else setError("Errore: " + e.message);
     } finally {
       setLoading(false);
     }
@@ -2217,38 +2219,57 @@ export default function App() {
     <div className="ba-page" style={{background:C.bg,fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif",color:C.dark}}>
 
       {/* ── NAVBAR ──────────────────────────────────────────────────────────── */}
-      <nav style={{background:C.card,borderBottom:`1px solid ${C.border}`,position:"sticky",top:0,zIndex:100,boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
-        {/* Riga brand + azioni */}
-        <div style={{maxWidth:1600,margin:"0 auto",padding:"0 20px",display:"flex",alignItems:"center",justifyContent:"space-between",height:52,gap:10}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-            <span style={{color:C.yellow,fontSize:16,fontWeight:900}}>⬡</span>
-            <div style={{display:"flex",borderRadius:9,overflow:"hidden",border:"1px solid #3a3a3a"}}>
+      <nav style={{
+        background:"rgba(255,255,255,0.88)",
+        backdropFilter:"blur(14px)",
+        WebkitBackdropFilter:"blur(14px)",
+        borderBottom:"1px solid rgba(0,0,0,0.07)",
+        position:"sticky",top:0,zIndex:100,
+        boxShadow:"0 1px 18px rgba(0,0,0,0.06)",
+      }}>
+        <div style={{maxWidth:1600,margin:"0 auto",padding:"0 20px",
+          display:"flex",alignItems:"center",justifyContent:"space-between",height:54,gap:12}}>
+
+          {/* Brand + toggle pagine liquid */}
+          <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+            <div style={{background:"#1a1a1a",borderRadius:9,padding:"5px 10px",display:"flex",alignItems:"center"}}>
+              <span style={{color:C.yellow,fontSize:15,lineHeight:1}}>⬡</span>
+            </div>
+            <div style={{display:"flex",background:"rgba(0,0,0,0.06)",borderRadius:10,padding:3,gap:2}}>
               {[["portfolio","Bond Portfolio"],["universe","Bond Universe"]].map(([id,label])=>(
                 <button key={id} onClick={()=>setActivePage(id)}
-                  style={{padding:"5px 13px",fontSize:12,fontWeight:700,cursor:"pointer",
-                    border:"none",whiteSpace:"nowrap",transition:"all 0.15s",
-                    background:activePage===id?"#f5c842":"#2a2a2a",
-                    color:activePage===id?"#1a1a1a":"#9ca3af"}}>
+                  style={{padding:"5px 14px",fontSize:12,fontWeight:700,cursor:"pointer",
+                    border:"none",borderRadius:7,whiteSpace:"nowrap",
+                    transition:"all 0.2s cubic-bezier(.4,0,.2,1)",
+                    background:activePage===id?"#fff":"transparent",
+                    color:activePage===id?"#1a1a1a":"#6b7280",
+                    boxShadow:activePage===id?"0 1px 6px rgba(0,0,0,0.12)":"none"}}>
                   {label}
                 </button>
               ))}
             </div>
           </div>
-          <FxRates onRates={onFxRates}/>
+
+          {/* Centro: FX rates */}
+          <div style={{flex:1,display:"flex",justifyContent:"center"}}>
+            <FxRates onRates={onFxRates}/>
+          </div>
+
+          {/* Destra: valuta + azioni */}
           <div style={{display:"flex",gap:7,alignItems:"center",flexShrink:0,flexWrap:"wrap"}}>
-            <div style={{display:"flex",border:"1px solid #e5e7eb",borderRadius:8,overflow:"hidden",flexShrink:0}}
-              title={!fxRates?"Tassi di cambio non ancora disponibili — seleziona prima € EUR":undefined}>
+            <div style={{display:"flex",background:"rgba(0,0,0,0.06)",borderRadius:8,padding:2,gap:1}}>
               {["EUR","USD"].map(ccy=>(
                 <button key={ccy}
                   onClick={()=>{ if(ccy==="USD"&&!fxRates) return; setPfCcy(ccy); }}
-                  style={{padding:"5px 10px",fontSize:11,fontWeight:700,
+                  style={{padding:"4px 10px",fontSize:11,fontWeight:700,border:"none",borderRadius:6,
                     cursor:ccy==="USD"&&!fxRates?"not-allowed":"pointer",
-                    border:"none",transition:"all 0.15s",
                     opacity:ccy==="USD"&&!fxRates?0.5:1,
-                    background:pfCcy===ccy?"#1a1a1a":"#fff",
-                    color:pfCcy===ccy?"#f5c842":"#6b7280"}}>
+                    transition:"all 0.2s",
+                    background:pfCcy===ccy?"#fff":"transparent",
+                    color:pfCcy===ccy?"#1a1a1a":"#6b7280",
+                    boxShadow:pfCcy===ccy?"0 1px 4px rgba(0,0,0,0.10)":"none"}}>
                   {ccy==="EUR"?"€ EUR":"$ USD"}
-                  {ccy!=="EUR"&&!fxRates&&<span style={{fontSize:9,marginLeft:2,color:"#f87171"}}>⏳</span>}
+                  {ccy!=="EUR"&&!fxRates&&<span style={{fontSize:9,marginLeft:2,opacity:0.5}}>⏳</span>}
                 </button>
               ))}
             </div>
@@ -2259,11 +2280,14 @@ export default function App() {
             <Btn primary sm onClick={()=>openReport(bonds,totale,stats,monthlyData)}>📄 Report</Btn>
           </div>
         </div>
-        {/* Tabs — visibili solo in Bond Portfolio */}
+
+        {/* Tabs — liquid underline, solo in Bond Portfolio */}
         {activePage==="portfolio"&&(
-          <div style={{borderTop:`1px solid ${C.border}`,overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none"}}>
-            <div style={{display:"flex",gap:0,padding:"0 16px",minWidth:"max-content"}}>
-              {[["overview","Panoramica"],["bonds","Titoli"],["cedole","Cedole"],["scadenze","Scadenze"],["flussi","Flussi"],["composizione","Composizione"]].map(([id,l])=>(
+          <div style={{borderTop:"1px solid rgba(0,0,0,0.06)",overflowX:"auto",
+            WebkitOverflowScrolling:"touch",scrollbarWidth:"none"}}>
+            <div style={{display:"flex",padding:"0 20px",minWidth:"max-content"}}>
+              {[["overview","Panoramica"],["bonds","Titoli"],["cedole","Cedole"],
+                ["scadenze","Scadenze"],["flussi","Flussi"],["composizione","Composizione"]].map(([id,l])=>(
                 <TabBtn key={id} id={id} label={l}/>
               ))}
             </div>
