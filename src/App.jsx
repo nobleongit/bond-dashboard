@@ -1857,8 +1857,8 @@ export default function App() {
       if(sortCol==="cy")      { va=calcCurrentYield(a); vb=calcCurrentYield(b); }
       if(sortCol==="rateo")   { va=a.rateo||0; vb=b.rateo||0; }
       if(sortCol==="nominale"){ va=calcNominale(a,totale); vb=calcNominale(b,totale); }
-      if(sortCol==="effettivo"){va=calcEffettivo(a,totale);vb=calcEffettivo(b,totale);}
-      if(sortCol==="cedAnnua"){ va=calcCouponAnnuo(a,totale);vb=calcCouponAnnuo(b,totale);}
+      if(sortCol==="effettivo"){va=convertToBase(calcEffettivo(a,totale),a.valuta||"EUR",fxRates,pfCcy);vb=convertToBase(calcEffettivo(b,totale),b.valuta||"EUR",fxRates,pfCcy);}
+      if(sortCol==="cedAnnua"){ va=convertToBase(calcCouponAnnuo(a,totale),a.valuta||"EUR",fxRates,pfCcy);vb=convertToBase(calcCouponAnnuo(b,totale),b.valuta||"EUR",fxRates,pfCcy);}
       // Null/undefined sempre in fondo
       if(va==null||va==="") return 1;
       if(vb==null||vb==="") return -1;
@@ -2403,10 +2403,10 @@ export default function App() {
                               </td>
                             );
                           })()}
-                          {/* Esborso */}
-                          <td style={{...TD,textAlign:"right",fontFamily:"monospace",fontStyle:"italic",color:C.blue,fontSize:11,fontWeight:600}}>{fe(calcEffettivo(b,totale))}</td>
-                          {/* Cedola annua */}
-                          <td style={{...TD,textAlign:"right",fontFamily:"monospace",fontStyle:"italic",color:"#d97706",fontSize:11}}>{fe(calcCouponAnnuo(b,totale))}</td>
+                          {/* Esborso — convertito in pfCcy */}
+                          <td style={{...TD,textAlign:"right",fontFamily:"monospace",fontStyle:"italic",color:C.blue,fontSize:11,fontWeight:600}}>{feCcy(convertToBase(calcEffettivo(b,totale),b.valuta||"EUR",fxRates,pfCcy))}</td>
+                          {/* Cedola annua — convertita in pfCcy */}
+                          <td style={{...TD,textAlign:"right",fontFamily:"monospace",fontStyle:"italic",color:"#d97706",fontSize:11}}>{feCcy(convertToBase(calcCouponAnnuo(b,totale),b.valuta||"EUR",fxRates,pfCcy))}</td>
                           {/* Delete */}
                           <td style={{...TD,padding:"6px 8px"}}>
                             <button onClick={()=>delBond(idx)} style={{background:"#fef2f2",color:C.red,border:"1px solid #fecaca",borderRadius:8,padding:"4px 9px",cursor:"pointer",fontSize:11,fontWeight:700}}>✕</button>
