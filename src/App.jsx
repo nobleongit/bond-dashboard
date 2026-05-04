@@ -2208,7 +2208,7 @@ export default function App() {
             <div style={{...card,background:C.yellowL,border:`1px solid ${C.yellowB}`,padding:"9px 16px",marginBottom:10,fontSize:11,color:"#92400e",display:"flex",gap:20,flexWrap:"wrap"}}>
               <span>✏️ Clicca su un campo per modificarlo.</span>
               <span><b>CY%</b> = Cedola%/(Ask/100) — rendimento cedolare effettivo.</span>
-              <span style={{fontStyle:"italic`Nom. nella valuta del bond. Esb. e Ced. convertiti in ${pfCcy}.`hidden"}}>
+              <span style={{fontStyle:"italic"}}>{`Nom. nella valuta del bond. Esb. e Ced. convertiti in ${pfCcy}.`}</span>
               <div className="ba-table-wrap">
                 <table className="ba-table-bonds" style={{borderCollapse:"collapse",fontSize:11.5,width:"max-content",minWidth:"100%"}}>
                   <thead>
